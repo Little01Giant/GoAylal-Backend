@@ -9,27 +9,22 @@ import {
   Param,
   Query,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import {
   AdminService,
   type AdminStatsResult,
   type AdminUserItem,
+  type Page,
 } from './admin.service.js';
 import { AdminGuard } from './guards/admin.guard.js';
 import { CreateSuggestedTripDto } from './dto/create-suggested-trip.dto.js';
 import { UpdateSuggestedTripDto } from './dto/update-suggested-trip.dto.js';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
+import { AdminTransactionsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto.js';
 import type { PaymentTransactionDocument } from '../payments/schemas/payment-transaction.schema.js';
 import type { SuggestedTripDocument } from '../destinations/schemas/suggested-trip.schema.js';
-import type { UserDocument } from '../auth/schemas/user.schema.js';
 import type { PaymentVerificationResult } from '../payments/payments.service.js';
 
 @ApiTags('Admin')
@@ -47,24 +42,10 @@ export class AdminController {
   }
 
   @Get('transactions')
-  @ApiOperation({ summary: 'Бүх гүйлгээнүүдийн жагсаалт авах' })
-  @ApiQuery({ name: 'search', required: false, description: 'Хайх үг (гүйлгээний дугаар, и-мэйл)' })
-  @ApiQuery({ name: 'status', required: false, description: 'Статус (completed, pending, all)' })
-  @ApiQuery({ name: 'page', required: false, description: 'Хуудасны дугаар' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Хуудас дахь тоо' })
+  @ApiOperation({ summary: 'Бүх гүйлгээнүүдийн жагсаалт (page ≥ 1, 1 ≤ limit ≤ 100)' })
   @ApiResponse({ status: 200, description: 'Гүйлгээнүүдийн жагсаалт' })
-  async getTransactions(
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ): Promise<{ items: PaymentTransactionDocument[]; total: number; page: number; totalPages: number }> {
-    return this.adminService.getTransactions({
-      search,
-      status,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 30,
-    });
+  async getTransactions(@Query() query: AdminTransactionsQueryDto): Promise<Page<PaymentTransactionDocument>> {
+    return this.adminService.getTransactions(query);
   }
 
   @Get('transactions/:id')
@@ -76,6 +57,7 @@ export class AdminController {
   }
 
   @Post('transactions/:id/recheck')
+  @HttpCode(200)
   @ApiOperation({ summary: 'QPay API-аас гүйлгээний төлөвийг дахин бодитоор шалгах' })
   @ApiParam({ name: 'id', description: 'Гүйлгээний ID эсвэл дугаар' })
   @ApiResponse({ status: 200, description: 'Шалгалтын үр дүн' })
@@ -84,31 +66,18 @@ export class AdminController {
   }
 
   @Get('users')
-  @ApiOperation({ summary: 'Бүртгэлтэй хэрэглэгчдийн жагсаалт авах' })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
+  @ApiOperation({ summary: 'Бүртгэлтэй хэрэглэгчдийн жагсаалт (page ≥ 1, 1 ≤ limit ≤ 100)' })
   @ApiResponse({ status: 200, description: 'Хэрэглэгчдийн жагсаалт' })
-  async getUsers(
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ): Promise<{ items: AdminUserItem[]; total: number; page: number }> {
-    return this.adminService.getUsers({
-      search,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 30,
-    });
+  async getUsers(@Query() query: AdminUsersQueryDto): Promise<Page<AdminUserItem>> {
+    return this.adminService.getUsers(query);
   }
 
   @Patch('users/:id/role')
   @ApiOperation({ summary: 'Хэрэглэгчийн эрх өөрчлөх (user / admin)' })
   @ApiParam({ name: 'id', description: 'Хэрэглэгчийн ID' })
   @ApiResponse({ status: 200, description: 'Шинэчлэгдсэн хэрэглэгч' })
-  async updateUserRole(
-    @Param('id') id: string,
-    @Body() dto: UpdateUserRoleDto,
-  ): Promise<UserDocument> {
+  @ApiResponse({ status: 409, description: 'Сүүлчийн админы эрхийг бууруулах боломжгүй.' })
+  async updateUserRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto) {
     return this.adminService.updateUserRole(id, dto.role);
   }
 
@@ -127,7 +96,7 @@ export class AdminController {
   }
 
   @Put('trips/:id')
-  @ApiOperation({ summary: 'Бэлэн төлөвлөгөө засах' })
+  @ApiOperation({ summary: 'Бэлэн төлөвлөгөө засах (slug өөрчлөгдөхгүй)' })
   @ApiParam({ name: 'id', description: 'Аяллын slug эсвэл ID' })
   @ApiResponse({ status: 200, description: 'Шинэчлэгдсэн төлөвлөгөө' })
   async updateTrip(

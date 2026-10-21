@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -10,13 +6,13 @@ import { Model, Types } from 'mongoose';
 import { OAuth2Client } from 'google-auth-library';
 import { User, UserDocument, UserRole } from './schemas/user.schema.js';
 import { GoogleAuthDto } from './dto/google-auth.dto.js';
+import type { AuthenticatedUser } from './auth.types.js';
 
 export interface VerifiedGoogleUser {
   readonly email: string;
-  readonly name?: string;
-  readonly picture?: string;
+  readonly name: string;
+  readonly picture?: string | undefined;
   readonly googleId: string;
-  readonly emailVerified?: boolean;
 }
 
 export interface AuthLoginResult {
@@ -24,16 +20,28 @@ export interface AuthLoginResult {
   readonly user: {
     readonly id: Types.ObjectId | string;
     readonly email: string;
-    readonly name?: string;
-    readonly image?: string;
+    readonly name?: string | undefined;
+    readonly image?: string | undefined;
     readonly role: string;
   };
+}
+
+export interface ProfileDto {
+  readonly id: string;
+  /** Transitional: the current frontend reads `_id` from /auth/me; remove once it uses `id`. */
+  readonly _id: string;
+  readonly email: string;
+  readonly name?: string | undefined;
+  readonly image?: string | undefined;
+  readonly role: UserRole;
+  readonly isActive: boolean;
+  readonly createdAt?: Date | undefined;
 }
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private googleClient: OAuth2Client;
+  private readonly googleClient: OAuth2Client;
 
   constructor(
     @InjectModel(User.name)
@@ -41,95 +49,64 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
-    const clientId = this.configService.get<string>('google.clientId');
-    this.googleClient = new OAuth2Client(clientId);
+    this.googleClient = new OAuth2Client(this.configService.get<string>('google.clientId'));
+  }
+
+  isAdminEmail(email: string): boolean {
+    const admins = this.configService.get<string[]>('admin.emails') ?? [];
+    return admins.includes(email.toLowerCase());
   }
 
   /**
-   * Google ID Token-ийг баталгаажуулж хэрэглэгчийн мэдээллийг задална
+   * Verifies a Google ID token with the official library (signature, expiry and audience)
+   * and requires a verified email. Identity is taken from the token claims only.
    */
   async verifyGoogleToken(idToken: string): Promise<VerifiedGoogleUser> {
-    const clientId = this.configService.get<string>('google.clientId');
-
-    // 1. Google OAuth2Client ашиглан шалгах
+    const audience = this.configService.get<string>('google.clientId');
     try {
-      const ticket = await this.googleClient.verifyIdToken({
-        idToken,
-        audience: clientId,
-      });
+      const ticket = await this.googleClient.verifyIdToken({ idToken, audience });
       const payload = ticket.getPayload();
-      if (payload && payload.email) {
+      if (payload?.email && payload.sub && payload.email_verified === true) {
         return {
-          email: payload.email,
-          name: payload.name ?? (payload.email.split('@')[0] ?? 'Хэрэглэгч'),
+          email: payload.email.toLowerCase(),
+          name: payload.name ?? payload.email.split('@')[0] ?? 'Хэрэглэгч',
           picture: payload.picture,
-          googleId: payload.sub ?? '',
-          emailVerified: payload.email_verified,
+          googleId: payload.sub,
         };
       }
     } catch (err) {
-      this.logger.warn(`google-auth-library verification failed: ${err}`);
+      this.logger.warn(`Google ID token verification failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    // 2. Fallback: Google-ийн албан ёсны tokeninfo API руу шууд хандах
-    try {
-      const res = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
-      );
-      if (res.ok) {
-        const payload = (await res.json()) as {
-          email?: string;
-          name?: string;
-          picture?: string;
-          sub?: string;
-          email_verified?: string | boolean;
-        };
-        if (payload.email) {
-          return {
-            email: payload.email,
-            name: payload.name ?? (payload.email.split('@')[0] ?? 'Хэрэглэгч'),
-            picture: payload.picture,
-            googleId: payload.sub ?? '',
-            emailVerified: payload.email_verified === 'true' || payload.email_verified === true,
-          };
-        }
-      }
-    } catch (err) {
-      this.logger.error(`Google tokeninfo endpoint failed: ${err}`);
-    }
-
-    throw new UnauthorizedException(
-      'Google нэвтрэлтийн токен хүчингүй байна (Invalid Google ID Token)',
-    );
+    throw new UnauthorizedException('Google нэвтрэлтийн токен хүчингүй байна (Invalid Google ID Token)');
   }
 
-  /**
-   * Google-ээр нэвтрэх эсвэл шинээр хэрэглэгч үүсгэх
-   */
   async loginWithGoogle(dto: GoogleAuthDto): Promise<AuthLoginResult> {
     const googleUser = await this.verifyGoogleToken(dto.idToken);
+    const shouldBeAdmin = this.isAdminEmail(googleUser.email);
 
-    // Өгөгдлийн сангаас хэрэглэгчийг имэйл эсвэл googleId-аар хайх
-    let user = await this.userModel.findOne({
-      $or: [{ email: googleUser.email.toLowerCase() }, { googleId: googleUser.googleId }],
-    });
+    let user =
+      (await this.userModel.findOne({ googleId: googleUser.googleId })) ??
+      (await this.userModel.findOne({ email: googleUser.email }));
 
-    const superAdminEmail = 'munkhuu.munkhsaihan01@gmail.com';
-    const isSuperAdmin = googleUser.email.toLowerCase() === superAdminEmail;
+    if (user?.googleId && user.googleId !== googleUser.googleId) {
+      // Same email, different Google identity: refuse rather than hand the account over.
+      throw new UnauthorizedException('Энэ имэйл хаяг өөр Google бүртгэлтэй холбогдсон байна.');
+    }
 
     if (!user) {
-      // Шинэ хэрэглэгч бүртгэх
       user = await this.userModel.create({
-        email: googleUser.email.toLowerCase(),
-        name: dto.name || googleUser.name,
-        image: dto.image || googleUser.picture,
+        email: googleUser.email,
+        name: googleUser.name,
+        image: googleUser.picture,
         googleId: googleUser.googleId,
-        role: isSuperAdmin ? UserRole.ADMIN : UserRole.USER,
+        role: shouldBeAdmin ? UserRole.ADMIN : UserRole.USER,
         isActive: true,
       });
       this.logger.log(`Шинэ хэрэглэгч Google-ээр бүртгэгдлээ: ${user.email} (эрх: ${user.role})`);
     } else {
-      // Мэдээлэл шинэчлэх (googleId эсвэл зураг дутуу байсан бол нөхөж хадгалах)
+      if (!user.isActive) {
+        throw new ForbiddenException('Таны бүртгэл идэвхгүй болгогдсон байна.');
+      }
       let shouldSave = false;
       if (!user.googleId) {
         user.googleId = googleUser.googleId;
@@ -139,7 +116,7 @@ export class AuthService {
         user.image = googleUser.picture;
         shouldSave = true;
       }
-      if (isSuperAdmin && user.role !== UserRole.ADMIN) {
+      if (shouldBeAdmin && user.role !== UserRole.ADMIN) {
         user.role = UserRole.ADMIN;
         shouldSave = true;
       }
@@ -148,36 +125,57 @@ export class AuthService {
       }
     }
 
-    // Системийн өөрийн JWT Access Token үүсгэх
-    const payload = {
+    const accessToken = await this.jwtService.signAsync({
       sub: user._id.toString(),
       email: user.email,
       role: user.role,
       name: user.name,
-    };
-
-    const accessToken = await this.jwtService.signAsync(payload);
+    });
 
     return {
       accessToken,
-      user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
-        role: user.role,
-      },
+      user: { id: user._id, email: user.email, name: user.name, image: user.image, role: user.role },
     };
   }
 
   /**
-   * Хэрэглэгчийн ID-аар профайл авах
+   * Verifies a bearer token and loads the current user. Role and active state come from the
+   * database so a demoted or deactivated user loses access immediately, not at token expiry.
    */
-  async getProfile(userId: string): Promise<UserDocument> {
-    const user = await this.userModel.findById(userId).select('-__v');
+  async authenticateToken(token: string): Promise<AuthenticatedUser> {
+    let sub: string;
+    try {
+      const payload = await this.jwtService.verifyAsync<{ sub?: string }>(token);
+      if (typeof payload.sub !== 'string' || !Types.ObjectId.isValid(payload.sub)) {
+        throw new Error('invalid subject');
+      }
+      sub = payload.sub;
+    } catch {
+      throw new UnauthorizedException('Токен хүчингүй эсвэл хугацаа нь дууссан байна');
+    }
+
+    const user = await this.userModel.findById(sub).lean().exec();
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Хэрэглэгч олдсонгүй эсвэл идэвхгүй байна');
+    }
+    return { sub, email: user.email, role: user.role, name: user.name };
+  }
+
+  async getProfile(userId: string): Promise<ProfileDto> {
+    const user = await this.userModel.findById(userId).lean().exec();
     if (!user) {
       throw new UnauthorizedException('Хэрэглэгч олдсонгүй');
     }
-    return user;
+    const id = user._id.toString();
+    return {
+      id,
+      _id: id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    };
   }
 }

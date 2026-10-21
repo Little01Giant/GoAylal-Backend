@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument, UserRole } from '../auth/schemas/user.schema.js';
 import {
@@ -20,6 +21,8 @@ import {
 import { PaymentsService, PaymentVerificationResult } from '../payments/payments.service.js';
 import { CreateSuggestedTripDto } from './dto/create-suggested-trip.dto.js';
 import { UpdateSuggestedTripDto } from './dto/update-suggested-trip.dto.js';
+import type { AdminTransactionsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto.js';
+import { escapeRegex } from '../../common/utils/escape-regex.js';
 
 export interface AdminStatsResult {
   readonly totalUsers: number;
@@ -36,7 +39,7 @@ export interface AdminUserItem {
   readonly id: string;
   readonly name: string;
   readonly email: string;
-  readonly image?: string;
+  readonly image?: string | undefined;
   readonly role: string;
   readonly isActive: boolean;
   readonly createdAt: string;
@@ -44,10 +47,22 @@ export interface AdminUserItem {
   readonly transactionsCount: number;
 }
 
+export interface Page<T> {
+  readonly items: T[];
+  readonly total: number;
+  readonly page: number;
+  readonly totalPages: number;
+}
+
+interface SpendGroup {
+  readonly _id: Types.ObjectId | string;
+  readonly spent: number;
+  readonly count: number;
+}
+
 @Injectable()
 export class AdminService implements OnModuleInit {
   private readonly logger = new Logger(AdminService.name);
-  readonly adminEmail = 'munkhuu.munkhsaihan01@gmail.com';
 
   constructor(
     @InjectModel(User.name)
@@ -57,136 +72,111 @@ export class AdminService implements OnModuleInit {
     @InjectModel(SuggestedTrip.name)
     private readonly tripModel: Model<SuggestedTripDocument>,
     private readonly paymentsService: PaymentsService,
+    private readonly configService: ConfigService,
   ) {}
 
+  private get adminEmails(): string[] {
+    return this.configService.get<string[]>('admin.emails') ?? [];
+  }
+
   async onModuleInit(): Promise<void> {
-    await this.ensureAdminAccount();
+    await this.ensureAdminAccounts();
     await this.seedInitialTrips();
   }
 
-  /**
-   * munkhuu.munkhsaihan01@gmail.com хаягийг ADMIN эрхтэйгээр шалгаж, шаардлагатай бол үүсгэх/шинэчлэх
-   */
-  async ensureAdminAccount(): Promise<void> {
-    try {
-      const existing = await this.userModel.findOne({ email: this.adminEmail.toLowerCase() });
-      if (!existing) {
-        await this.userModel.create({
-          email: this.adminEmail.toLowerCase(),
-          name: 'Мөнххүү Мөнхсайхан (Админ)',
-          role: UserRole.ADMIN,
-          isActive: true,
-        });
-        this.logger.log(`Үндсэн админ хэрэглэгч үүсгэгдлээ: ${this.adminEmail}`);
-      } else if (existing.role !== UserRole.ADMIN) {
-        existing.role = UserRole.ADMIN;
-        await existing.save();
-        this.logger.log(`Хэрэглэгчийн эрх ADMIN болж шинэчлэгдлээ: ${this.adminEmail}`);
+  /** Makes sure every configured ADMIN_EMAILS account exists with the admin role. */
+  async ensureAdminAccounts(): Promise<void> {
+    for (const email of this.adminEmails) {
+      try {
+        const existing = await this.userModel.findOne({ email });
+        if (!existing) {
+          await this.userModel.create({ email, name: email.split('@')[0], role: UserRole.ADMIN, isActive: true });
+          this.logger.log(`Админ хэрэглэгч үүсгэгдлээ: ${email}`);
+        } else if (existing.role !== UserRole.ADMIN) {
+          existing.role = UserRole.ADMIN;
+          await existing.save();
+          this.logger.log(`Хэрэглэгчийн эрх ADMIN болж шинэчлэгдсэн: ${email}`);
+        }
+      } catch (err) {
+        this.logger.warn(`ensureAdminAccounts error for ${email}: ${String(err)}`);
       }
-    } catch (err) {
-      this.logger.warn(`ensureAdminAccount error: ${err}`);
     }
   }
 
-  /**
-   * Анхны бэлэн төлөвлөгөөг MongoDB-д суулгах
-   */
+  /** Seeds the first curated trip only into an empty collection. */
   private async seedInitialTrips(): Promise<void> {
     try {
-      const count = await this.tripModel.countDocuments();
-      if (count === 0) {
-        await this.tripModel.create({
-          slug: 'trip-beijing',
-          title: 'Бээжин хотын аяллын хөтөлбөр',
-          destination: 'Бээжин хот, Хятад',
-          country: 'Хятад',
-          countryKey: 'china',
-          countryFlag: '🇨🇳',
-          durationText: '3 – 10 өдөр',
-          daysCount: 5,
-          category: 'historical',
-          categoryLabel: 'Бэлэн төлөвлөгөө',
-          startingPrice: 1348250,
-          imageUrl:
-            'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=800&q=80',
-          rating: 4.9,
-          reviewsCount: 184,
-          highlights: [
-            'Цагаан хэрэм (Мутяньюй кабель зам & чарга)',
-            'Хориотой хот (Хааны ордны музей)',
-            'Юниверсал Студио Бээжин бүрэн өдөр',
-            'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
-          ],
-          isActive: true,
-        });
-        this.logger.log('Анхны бэлэн аяллын хөтөлбөр (Бээжин) үүсгэгдлээ.');
+      if ((await this.tripModel.countDocuments()) > 0) {
+        return;
       }
+      await this.tripModel.create({
+        slug: 'trip-beijing',
+        title: 'Бээжин хотын аяллын хөтөлбөр',
+        destination: 'Бээжин хот, Хятад',
+        country: 'Хятад',
+        countryKey: 'china',
+        countryFlag: '🇨🇳',
+        durationText: '3 – 10 өдөр',
+        daysCount: 5,
+        category: 'historical',
+        categoryLabel: 'Бэлэн төлөвлөгөө',
+        startingPrice: 1348250,
+        imageUrl:
+          'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=800&q=80',
+        rating: 4.9,
+        reviewsCount: 184,
+        highlights: [
+          'Цагаан хэрэм (Мутяньюй кабель зам & чарга)',
+          'Хориотой хот (Хааны ордны музей)',
+          'Юниверсал Студио Бээжин бүрэн өдөр',
+          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
+        ],
+        isActive: true,
+      });
+      this.logger.log('Анхны бэлэн аяллын хөтөлбөр (Бээжин) үүсгэгдлээ.');
     } catch (err) {
-      this.logger.warn(`seedInitialTrips error: ${err}`);
+      this.logger.warn(`seedInitialTrips error: ${String(err)}`);
     }
   }
 
-  /**
-   * Хяналтын самбарын нийт статистик мэдээлэл
-   */
+  /** Dashboard totals computed in the database instead of loading every transaction. */
   async getStats(): Promise<AdminStatsResult> {
-    const [totalUsers, allTransactions, totalTrips, recentTransactions, recentUsers] =
-      await Promise.all([
-        this.userModel.countDocuments().exec(),
-        this.paymentModel.find().lean().exec(),
-        this.tripModel.countDocuments({ isActive: true }).exec(),
-        this.paymentModel.find().sort({ createdAt: -1 }).limit(5).exec(),
-        this.userModel.find().sort({ createdAt: -1 }).limit(5).exec(),
-      ]);
+    const [totalUsers, byStatus, totalTrips, recentTransactions, recentUsers] = await Promise.all([
+      this.userModel.countDocuments().exec(),
+      this.paymentModel
+        .aggregate<{ _id: PaymentStatus; count: number; revenue: number }>([
+          { $group: { _id: '$status', count: { $sum: 1 }, revenue: { $sum: '$amount' } } },
+        ])
+        .exec(),
+      this.tripModel.countDocuments({ isActive: true }).exec(),
+      this.paymentModel.find().sort({ createdAt: -1 }).limit(5).exec(),
+      this.userModel.find().sort({ createdAt: -1 }).limit(5).exec(),
+    ]);
 
-    const totalTransactions = allTransactions.length;
-    let completedTransactions = 0;
-    let pendingTransactions = 0;
-    let totalRevenue = 0;
-
-    for (const trx of allTransactions) {
-      if (trx.status === PaymentStatus.COMPLETED) {
-        completedTransactions++;
-        totalRevenue += trx.amount || 0;
-      } else if (trx.status === PaymentStatus.PENDING) {
-        pendingTransactions++;
-      }
-    }
-
+    const completed = byStatus.find((g) => g._id === PaymentStatus.COMPLETED);
+    const pending = byStatus.find((g) => g._id === PaymentStatus.PENDING);
     return {
       totalUsers,
-      totalTransactions,
-      completedTransactions,
-      pendingTransactions,
-      totalRevenue,
+      totalTransactions: byStatus.reduce((sum, g) => sum + g.count, 0),
+      completedTransactions: completed?.count ?? 0,
+      pendingTransactions: pending?.count ?? 0,
+      totalRevenue: completed?.revenue ?? 0,
       totalTrips,
       recentTransactions,
       recentUsers,
     };
   }
 
-  /**
-   * Бүх гүйлгээний жагсаалт хайлт, шүүлтүүртэйгээр авах
-   */
-  async getTransactions(query?: {
-    search?: string;
-    status?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ items: PaymentTransactionDocument[]; total: number; page: number; totalPages: number }> {
-    const page = Math.max(1, query?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query?.limit ?? 30));
-    const skip = (page - 1) * limit;
-
+  async getTransactions(query: AdminTransactionsQueryDto): Promise<Page<PaymentTransactionDocument>> {
+    const { page, limit } = query;
     const filter: Record<string, unknown> = {};
 
-    if (query?.status && query.status !== 'all') {
+    if (query.status && query.status !== 'all') {
       filter.status = query.status;
     }
-
-    if (query?.search && query.search.trim()) {
-      const term = query.search.trim();
-      const regex = new RegExp(term, 'i');
+    const term = query.search?.trim();
+    if (term) {
+      const regex = new RegExp(escapeRegex(term), 'i');
       filter.$or = [
         { transactionNumber: regex },
         { invoiceNumber: regex },
@@ -196,130 +186,132 @@ export class AdminService implements OnModuleInit {
     }
 
     const [items, total] = await Promise.all([
-      this.paymentModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      this.paymentModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
       this.paymentModel.countDocuments(filter).exec(),
     ]);
-
-    return {
-      items,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit) || 1,
-    };
+    return { items, total, page, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  /**
-   * Нэг гүйлгээний дэлгэрэнгүй баримт & төлөвлөгөөний snapshot авах
-   */
   async getTransactionDetails(id: string): Promise<PaymentTransactionDocument> {
-    let trx: PaymentTransactionDocument | null = null;
-    if (Types.ObjectId.isValid(id)) {
-      trx = await this.paymentModel.findById(id).exec();
-    }
-    if (!trx) {
-      trx = await this.paymentModel
-        .findOne({
-          $or: [{ transactionNumber: id }, { invoiceNumber: id }, { qpayInvoiceId: id }],
-        })
-        .exec();
-    }
+    const filter = Types.ObjectId.isValid(id)
+      ? { _id: new Types.ObjectId(id) }
+      : { $or: [{ transactionNumber: id }, { invoiceNumber: id }, { qpayInvoiceId: id }] };
+    const trx = await this.paymentModel.findOne(filter).exec();
     if (!trx) {
       throw new NotFoundException('Гүйлгээ олдсонгүй.');
     }
     return trx;
   }
 
-  /**
-   * QPay API-тай шууд холбогдож гүйлгээг шалгах
-   */
+  /** Re-checks the payment with QPay; settles it if (and only if) QPay confirms. */
   async recheckTransaction(id: string): Promise<PaymentVerificationResult> {
-    return this.paymentsService.verifyPayment(id, false);
+    return this.paymentsService.verifyPayment(id);
   }
 
-  /**
-   * Хэрэглэгчдийн жагсаалт ба тэдний зарцуулалтын түүх
-   */
-  async getUsers(query?: { search?: string; page?: number; limit?: number }): Promise<{
-    items: AdminUserItem[];
-    total: number;
-    page: number;
-  }> {
-    const page = Math.max(1, query?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query?.limit ?? 30));
-    const skip = (page - 1) * limit;
-
+  /** Users with their completed-payment totals, using two grouped queries for the whole page. */
+  async getUsers(query: AdminUsersQueryDto): Promise<Page<AdminUserItem>> {
+    const { page, limit } = query;
     const filter: Record<string, unknown> = {};
-    if (query?.search && query.search.trim()) {
-      const regex = new RegExp(query.search.trim(), 'i');
+    const term = query.search?.trim();
+    if (term) {
+      const regex = new RegExp(escapeRegex(term), 'i');
       filter.$or = [{ name: regex }, { email: regex }];
     }
 
     const [users, total] = await Promise.all([
-      this.userModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().exec(),
+      this.userModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .exec(),
       this.userModel.countDocuments(filter).exec(),
     ]);
 
-    // Aggregate user transactions
-    const items: AdminUserItem[] = await Promise.all(
-      users.map(async (u) => {
-        const userTrxs = await this.paymentModel
-          .find({
-            $or: [{ userId: u._id }, { customerEmail: u.email.toLowerCase() }],
-            status: PaymentStatus.COMPLETED,
-          })
-          .lean()
-          .exec();
+    const ids = users.map((u) => u._id);
+    const emails = users.map((u) => u.email.toLowerCase());
+    const completed = { status: PaymentStatus.COMPLETED };
+    const [byUser, byGuestEmail] = await Promise.all([
+      this.paymentModel
+        .aggregate<SpendGroup>([
+          { $match: { ...completed, userId: { $in: ids } } },
+          { $group: { _id: '$userId', spent: { $sum: '$amount' }, count: { $sum: 1 } } },
+        ])
+        .exec(),
+      this.paymentModel
+        .aggregate<SpendGroup>([
+          { $match: { ...completed, userId: { $exists: false }, customerEmail: { $in: emails } } },
+          { $group: { _id: '$customerEmail', spent: { $sum: '$amount' }, count: { $sum: 1 } } },
+        ])
+        .exec(),
+    ]);
+    const userSpend = new Map(byUser.map((g) => [String(g._id), g]));
+    const guestSpend = new Map(byGuestEmail.map((g) => [String(g._id), g]));
 
-        const totalSpent = userTrxs.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const items = users.map((u): AdminUserItem => {
+      const own = userSpend.get(u._id.toString());
+      const guest = guestSpend.get(u.email.toLowerCase());
+      return {
+        id: u._id.toString(),
+        name: u.name ?? u.email.split('@')[0] ?? 'Хэрэглэгч',
+        email: u.email,
+        image: u.image,
+        role: u.role,
+        isActive: u.isActive,
+        createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString('mn-MN') : '',
+        totalSpent: (own?.spent ?? 0) + (guest?.spent ?? 0),
+        transactionsCount: (own?.count ?? 0) + (guest?.count ?? 0),
+      };
+    });
 
-        return {
-          id: u._id.toString(),
-          name: u.name ?? u.email.split('@')[0] ?? 'Хэрэглэгч',
-          email: u.email,
-          image: u.image,
-          role: u.role,
-          isActive: u.isActive,
-          createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString('mn-MN') : '',
-          totalSpent,
-          transactionsCount: userTrxs.length,
-        };
-      }),
-    );
-
-    return { items, total, page };
+    return { items, total, page, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  /**
-   * Хэрэглэгчийн эрх өөрчлөх (User <-> Admin)
-   */
-  async updateUserRole(userId: string, role: UserRole): Promise<UserDocument> {
-    const user = await this.userModel.findById(userId);
+  /** Changes a role. The last admin and the ADMIN_EMAILS accounts cannot be demoted. */
+  async updateUserRole(userId: string, role: UserRole): Promise<{ id: string; _id: string; email: string; name?: string | undefined; role: UserRole; isActive: boolean }> {
+    const user = Types.ObjectId.isValid(userId) ? await this.userModel.findById(userId) : null;
     if (!user) {
       throw new NotFoundException('Хэрэглэгч олдсонгүй.');
     }
+
+    if (user.role === UserRole.ADMIN && role !== UserRole.ADMIN) {
+      if (this.adminEmails.includes(user.email.toLowerCase())) {
+        throw new ConflictException('Системийн үндсэн админы эрхийг бууруулах боломжгүй.');
+      }
+      const otherAdmins = await this.userModel.countDocuments({
+        role: UserRole.ADMIN,
+        isActive: true,
+        _id: { $ne: user._id },
+      });
+      if (otherAdmins === 0) {
+        throw new ConflictException('Сүүлчийн админы эрхийг бууруулах боломжгүй.');
+      }
+    }
+
     user.role = role;
     await user.save();
-    return user;
+    const id = user._id.toString();
+    return { id, _id: id, email: user.email, name: user.name, role: user.role, isActive: user.isActive };
   }
 
-  /**
-   * Бүх бэлэн аяллын хөтөлбөрүүд авах
-   */
   async getTrips(): Promise<SuggestedTripDocument[]> {
     return this.tripModel.find().sort({ createdAt: -1 }).exec();
   }
 
-  /**
-   * Шинэ бэлэн аяллын төлөвлөгөө нэмэх
-   */
   async createTrip(dto: CreateSuggestedTripDto): Promise<SuggestedTripDocument> {
-    const existing = await this.tripModel.findOne({ slug: dto.slug.trim() });
-    if (existing) {
+    const slug = dto.slug.trim();
+    if (await this.tripModel.exists({ slug })) {
       throw new ConflictException(`'${dto.slug}' кодтой аяллын хөтөлбөр бүртгэгдсэн байна.`);
     }
 
-    const trip = await this.tripModel.create({
-      slug: dto.slug.trim(),
+    return this.tripModel.create({
+      slug,
       title: dto.title.trim(),
       destination: dto.destination.trim(),
       country: dto.country.trim(),
@@ -334,46 +326,30 @@ export class AdminService implements OnModuleInit {
       rating: dto.rating ?? 5.0,
       reviewsCount: dto.reviewsCount ?? 1,
       highlights: dto.highlights ?? [],
-      isActive: dto.isActive !== undefined ? dto.isActive : true,
+      isActive: dto.isActive ?? true,
     });
-
-    return trip;
   }
 
-  /**
-   * Бэлэн аяллын төлөвлөгөө засах
-   */
   async updateTrip(id: string, dto: UpdateSuggestedTripDto): Promise<SuggestedTripDocument> {
-    let trip = null;
-    if (Types.ObjectId.isValid(id)) {
-      trip = await this.tripModel.findById(id);
-    }
-    if (!trip) {
-      trip = await this.tripModel.findOne({ slug: id });
-    }
-    if (!trip) {
-      throw new NotFoundException('Аяллын хөтөлбөр олдсонгүй.');
-    }
-
-    Object.assign(trip, dto);
+    const trip = await this.findTrip(id);
+    trip.set(dto);
     await trip.save();
     return trip;
   }
 
-  /**
-   * Бэлэн аяллын төлөвлөгөө устгах
-   */
   async deleteTrip(id: string): Promise<{ success: boolean }> {
-    let trip = null;
-    if (Types.ObjectId.isValid(id)) {
-      trip = await this.tripModel.findByIdAndDelete(id);
-    }
-    if (!trip) {
-      trip = await this.tripModel.findOneAndDelete({ slug: id });
-    }
-    if (!trip) {
-      throw new NotFoundException('Устгах аяллын хөтөлбөр олдсонгүй.');
-    }
+    const trip = await this.findTrip(id);
+    await trip.deleteOne();
     return { success: true };
+  }
+
+  private async findTrip(id: string): Promise<SuggestedTripDocument> {
+    const trip =
+      (Types.ObjectId.isValid(id) ? await this.tripModel.findById(id) : null) ??
+      (await this.tripModel.findOne({ slug: id }));
+    if (!trip) {
+      throw new NotFoundException('Аяллын хөтөлбөр олдсонгүй.');
+    }
+    return trip;
   }
 }

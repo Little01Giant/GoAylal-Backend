@@ -8,6 +8,10 @@ export class Hotel {
   @Prop({ type: Types.ObjectId, ref: 'Destination', required: true, index: true })
   destinationId: Types.ObjectId;
 
+  /** Stable natural id from the seed catalog; makes seeding an idempotent upsert. */
+  @Prop({ required: false })
+  seedId?: string;
+
   @Prop({ required: true, index: true })
   destinationKey: string;
 
@@ -34,3 +38,8 @@ export class Hotel {
 }
 
 export const HotelSchema = SchemaFactory.createForClass(Hotel);
+
+HotelSchema.index(
+  { destinationKey: 1, seedId: 1 },
+  { unique: true, partialFilterExpression: { seedId: { $type: 'string' } } },
+);

@@ -9,12 +9,16 @@ export enum PaymentMethod {
   BANK_TRANSFER = 'bank_transfer',
 }
 
+/** The only values the API ever emits. `refunded` is reserved for manual support action. */
 export enum PaymentStatus {
   PENDING = 'pending',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  EXPIRED = 'expired',
   REFUNDED = 'refunded',
 }
+
+export const PENDING_DEDUPE_INDEX = 'uniq_pending_dedupe_key';
 
 @Schema({ _id: false })
 export class ReceiptItem {
@@ -34,20 +38,21 @@ export const ReceiptItemSchema = SchemaFactory.createForClass(ReceiptItem);
 
 @Schema({ timestamps: true, collection: 'payment_transactions' })
 export class PaymentTransaction {
-  @Prop({ required: true, unique: true, index: true })
-  transactionNumber: string; // TRX-2026-XXXX
+  @Prop({ required: true, unique: true })
+  transactionNumber: string; // TRX-2026-1021-0001
 
-  @Prop({ required: true, unique: true, index: true })
-  invoiceNumber: string; // INV-2026-XXXX
+  @Prop({ required: true, unique: true })
+  invoiceNumber: string; // INV-2026-1021-0001
 
   @Prop({ type: Types.ObjectId, ref: 'Itinerary', required: false })
   itineraryId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
-  userId: Types.ObjectId;
+  /** Absent for guest checkout until the payer signs in with the same verified email. */
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false })
+  userId?: Types.ObjectId;
 
   @Prop({ type: Number, required: true })
-  amount: number; // in MNT ₮
+  amount: number; // in MNT ₮, always the server-side unlock fee
 
   @Prop({ default: 'MNT' })
   currency: string;
@@ -55,10 +60,14 @@ export class PaymentTransaction {
   @Prop({ required: true, enum: PaymentMethod, default: PaymentMethod.QPAY })
   method: PaymentMethod;
 
-  @Prop({ required: true, enum: PaymentStatus, default: PaymentStatus.PENDING, index: true })
+  @Prop({ required: true, enum: PaymentStatus, default: PaymentStatus.PENDING })
   status: PaymentStatus;
 
-  @Prop({ required: false, index: true })
+  /** One pending invoice per payer+plan; enforced by a partial unique index. */
+  @Prop({ required: false, select: false })
+  dedupeKey?: string;
+
+  @Prop({ required: false })
   qpayInvoiceId?: string;
 
   @Prop({ required: false })
@@ -87,9 +96,10 @@ export class PaymentTransaction {
   @Prop({ type: [ReceiptItemSchema], default: [] })
   items: ReceiptItem[];
 
-  @Prop({ required: false })
+  @Prop({ required: false, lowercase: true, trim: true })
   customerEmail?: string;
 
+  /** Immutable after creation; client-supplied display data, never used for pricing. */
   @Prop({ type: Object, required: false })
   planSnapshot?: Record<string, unknown>;
 
@@ -98,3 +108,16 @@ export class PaymentTransaction {
 }
 
 export const PaymentTransactionSchema = SchemaFactory.createForClass(PaymentTransaction);
+
+PaymentTransactionSchema.index({ userId: 1, createdAt: -1 });
+PaymentTransactionSchema.index({ customerEmail: 1, createdAt: -1 });
+PaymentTransactionSchema.index({ status: 1, createdAt: -1 });
+PaymentTransactionSchema.index({ qpayInvoiceId: 1 });
+PaymentTransactionSchema.index(
+  { dedupeKey: 1 },
+  {
+    name: PENDING_DEDUPE_INDEX,
+    unique: true,
+    partialFilterExpression: { status: PaymentStatus.PENDING, dedupeKey: { $exists: true } },
+  },
+);

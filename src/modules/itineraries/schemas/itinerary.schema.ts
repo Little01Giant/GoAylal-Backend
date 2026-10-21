@@ -6,6 +6,8 @@ export type ItineraryDocument = Itinerary & Document;
 export enum ItineraryStatus {
   DRAFT = 'draft',
   SAVED = 'saved',
+  /** Set by payment settlement; an unlocked itinerary is read-only. */
+  UNLOCKED = 'unlocked',
   BOOKED = 'booked',
   COMPLETED = 'completed',
 }

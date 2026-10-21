@@ -1,10 +1,9 @@
 import net from 'node:net';
+import { Logger } from '@nestjs/common';
 
+const logger = new Logger('Database');
 let memoryServer: { getUri: () => string } | null = null;
 
-/**
- * Checks if a TCP port is open locally
- */
 function isPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -26,40 +25,38 @@ function isPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
 }
 
 /**
- * Automatically resolves the MongoDB connection URI.
- * - If MongoDB Atlas / remote cluster is configured, uses it.
- * - If local MongoDB daemon is running on 27017, uses it.
- * - Otherwise, spins up an embedded in-memory MongoDB server for instant local dev.
+ * Resolves the MongoDB connection URI.
+ * - Remote / Atlas URIs are used as configured.
+ * - A local URI is used when a daemon listens on 27017.
+ * - Otherwise development falls back to an embedded in-memory server. Production never does:
+ *   it fails instead of silently running on volatile storage.
  */
-export async function resolveMongoUri(configuredUri: string): Promise<string> {
-  // 1. Remote or Cloud Atlas URI
-  if (
-    configuredUri.startsWith('mongodb+srv://') ||
-    (!configuredUri.includes('127.0.0.1') && !configuredUri.includes('localhost'))
-  ) {
-    console.log(`📡 Connecting to remote MongoDB: ${configuredUri.split('@')[1] ?? configuredUri}`);
+export async function resolveMongoUri(configuredUri: string, isProduction = false): Promise<string> {
+  const isLocal = configuredUri.includes('127.0.0.1') || configuredUri.includes('localhost');
+  if (configuredUri.startsWith('mongodb+srv://') || !isLocal) {
+    logger.log('Connecting to remote MongoDB');
     return configuredUri;
   }
 
-  // 2. Check if local MongoDB daemon is already listening on 27017
-  const isLocalRunning = await isPortOpen(27017);
-  if (isLocalRunning) {
-    console.log(`🔌 Local MongoDB detected on 127.0.0.1:27017. Connecting to: ${configuredUri}`);
+  // A local URI on a non-default port was chosen deliberately (e.g. a test database): use it as is.
+  const port = /:(\d+)(?:[/?]|$)/.exec(configuredUri.replace(/^mongodb:\/\//, ''))?.[1];
+  if (port !== undefined && port !== '27017') {
     return configuredUri;
   }
 
-  // 3. Fallback: Start embedded in-memory MongoDB
+  if (await isPortOpen(27017)) {
+    logger.log('Local MongoDB detected on 127.0.0.1:27017');
+    return configuredUri;
+  }
+
+  if (isProduction) {
+    throw new Error('MongoDB is not reachable at the configured local URI and the in-memory fallback is disabled in production');
+  }
+
   if (!memoryServer) {
-    console.log('⚡ Local MongoDB not found. Starting embedded In-Memory MongoDB server...');
+    logger.warn('Local MongoDB not found. Starting embedded in-memory MongoDB (data is not persisted).');
     const { MongoMemoryServer } = await import('mongodb-memory-server');
-    memoryServer = await MongoMemoryServer.create({
-      instance: {
-        dbName: 'goaylal',
-      },
-    });
+    memoryServer = await MongoMemoryServer.create({ instance: { dbName: 'goaylal' } });
   }
-
-  const inMemoryUri = memoryServer.getUri();
-  console.log(`✨ In-Memory MongoDB running successfully at: ${inMemoryUri}`);
-  return inMemoryUri;
+  return memoryServer.getUri();
 }

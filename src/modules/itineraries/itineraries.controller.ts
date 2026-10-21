@@ -1,90 +1,70 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtService } from '@nestjs/jwt';
-import { ItinerariesService } from './itineraries.service.js';
+import { ItinerariesService, type ItineraryDto } from './itineraries.service.js';
 import { CreateItineraryDto } from './dto/create-itinerary.dto.js';
-import type { Itinerary, ItineraryDocument } from './schemas/itinerary.schema.js';
+import { ReorderItemsDto } from './dto/reorder-items.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { requireUser } from '../../common/utils/require-user.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
 
 @ApiTags('Itineraries')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('itineraries')
 export class ItinerariesController {
-  constructor(
-    private readonly itinerariesService: ItinerariesService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly itinerariesService: ItinerariesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Шинэ аяллын хөтөлбөр үүсгэх' })
-  @ApiResponse({ status: 201, description: 'Аяллын хөтөлбөр амжилттай үүслээ.' })
+  @ApiOperation({ summary: 'Аяллын хөтөлбөрийг эзэмшигчид хадгалах (нэвтрэх шаардлагатай)' })
+  @ApiResponse({ status: 201, description: 'Аяллын хөтөлбөр амжилттай хадгалагдлаа.' })
+  @ApiResponse({ status: 401, description: 'Нэвтрээгүй: нэвтэрсний дараа хадгална.' })
   async createItinerary(
     @Body() dto: CreateItineraryDto,
-    @Req() req: { headers: { authorization?: string } },
-  ): Promise<ItineraryDocument> {
-    let userId: string | undefined;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      if (token) {
-        try {
-          const payload = this.jwtService.decode(token) as { sub?: string } | null;
-          if (payload?.sub) {
-            userId = payload.sub;
-          }
-        } catch {
-          // Guest/unauthenticated fallback
-        }
-      }
-    }
-    return this.itinerariesService.create(dto, userId);
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ): Promise<ItineraryDto> {
+    return this.itinerariesService.create(dto, requireUser(user));
   }
 
   @Get('my')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Хэрэглэгчийн хадгалсан аяллууд' })
   @ApiResponse({ status: 200, description: 'Хэрэглэгчийн аяллуудын жагсаалт.' })
-  async getMyItineraries(@Req() req: { user: { sub: string } }): Promise<Itinerary[]> {
-    return this.itinerariesService.findUserItineraries(req.user.sub);
+  async getMyItineraries(@CurrentUser() user: AuthenticatedUser | undefined): Promise<ItineraryDto[]> {
+    return this.itinerariesService.findUserItineraries(requireUser(user));
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Аяллын хөтөлбөрийг ID-аар авах' })
+  @ApiOperation({ summary: 'Аяллын хөтөлбөрийг ID-аар авах (эзэмшигч / админ)' })
   @ApiParam({ name: 'id', description: 'Хөтөлбөрийн ObjectId' })
   @ApiResponse({ status: 200, description: 'Хөтөлбөрийн дэлгэрэнгүй өгөгдөл.' })
   @ApiResponse({ status: 404, description: 'Аяллын хөтөлбөр олдсонгүй.' })
-  async getItinerary(@Param('id') id: string): Promise<Itinerary> {
-    return this.itinerariesService.findById(id);
+  async getItinerary(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ): Promise<ItineraryDto> {
+    return this.itinerariesService.findById(id, requireUser(user));
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Аяллын хөтөлбөр устгах' })
+  @ApiOperation({ summary: 'Аяллын хөтөлбөр устгах (эзэмшигч)' })
   @ApiParam({ name: 'id', description: 'Хөтөлбөрийн ObjectId' })
   @ApiResponse({ status: 200, description: 'Аяллын хөтөлбөр амжилттай устгагдлаа.' })
-  async deleteItinerary(@Param('id') id: string): Promise<{ deleted: boolean; id: string }> {
-    return this.itinerariesService.delete(id);
+  async deleteItinerary(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ): Promise<{ deleted: boolean; id: string }> {
+    return this.itinerariesService.delete(id, requireUser(user));
   }
 
   @Put(':id/reorder-items')
-  @ApiOperation({ summary: 'Drag-and-Drop дараалал өөрчлөх' })
+  @ApiOperation({ summary: 'Drag-and-Drop дараалал өөрчлөх (эзэмшигч, төлбөр төлөгдөөгүй хөтөлбөр)' })
   @ApiParam({ name: 'id', description: 'Хөтөлбөрийн ObjectId' })
   @ApiResponse({ status: 200, description: 'Дараалал шинэчлэгдсэн үр дүн.' })
   async reorderItems(
     @Param('id') id: string,
-    @Body()
-    body: {
-      sourceDayNumber: number;
-      destinationDayNumber: number;
-      itemId: string;
-      newOrderIndex: number;
-    },
-  ): Promise<{ updated: boolean; totalCost: number }> {
-    return this.itinerariesService.reorderItems(
-      id,
-      body.sourceDayNumber,
-      body.destinationDayNumber,
-      body.itemId,
-      body.newOrderIndex,
-    );
+    @Body() dto: ReorderItemsDto,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ): Promise<{ updated: boolean; totalCost: number; recalculatedTotalCost: number }> {
+    return this.itinerariesService.reorderItems(id, dto, requireUser(user));
   }
 }
