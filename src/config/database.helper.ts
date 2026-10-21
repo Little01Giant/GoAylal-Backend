@@ -2,7 +2,14 @@ import net from 'node:net';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('Database');
-let memoryServer: { getUri: () => string } | null = null;
+interface MemoryMongo {
+  getUri: () => string;
+}
+interface MemoryMongoModule {
+  MongoMemoryServer: { create: (options: { instance: { dbName: string } }) => Promise<MemoryMongo> };
+}
+
+let memoryServer: MemoryMongo | null = null;
 
 function isPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
   return new Promise((resolve) => {
@@ -55,7 +62,9 @@ export async function resolveMongoUri(configuredUri: string, isProduction = fals
 
   if (!memoryServer) {
     logger.warn('Local MongoDB not found. Starting embedded in-memory MongoDB (data is not persisted).');
-    const { MongoMemoryServer } = await import('mongodb-memory-server');
+    // devDependency only: resolved by a non-literal specifier so production builds do not need it installed.
+    const moduleName = 'mongodb-memory-server';
+    const { MongoMemoryServer } = (await import(moduleName)) as MemoryMongoModule;
     memoryServer = await MongoMemoryServer.create({ instance: { dbName: 'goaylal' } });
   }
   return memoryServer.getUri();
