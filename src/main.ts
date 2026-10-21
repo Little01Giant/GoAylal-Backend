@@ -45,9 +45,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  // 6. Listen on Port
+  // 6. Listen on Port (bind 0.0.0.0 for Render, Docker & Cloud container compatibility)
   const port = configService.get<number>('port') ?? 4000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`🚀 GoAylal Backend is running on: http://localhost:${port}/api/v1`);
   console.log(`📚 Swagger API Docs available on: http://localhost:${port}/api/docs`);
 }
