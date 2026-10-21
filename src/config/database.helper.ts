@@ -1,7 +1,6 @@
 import net from 'node:net';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 
-let memoryServer: MongoMemoryServer | null = null;
+let memoryServer: { getUri: () => string } | null = null;
 
 /**
  * Checks if a TCP port is open locally
@@ -52,6 +51,7 @@ export async function resolveMongoUri(configuredUri: string): Promise<string> {
   // 3. Fallback: Start embedded in-memory MongoDB
   if (!memoryServer) {
     console.log('⚡ Local MongoDB not found. Starting embedded In-Memory MongoDB server...');
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
     memoryServer = await MongoMemoryServer.create({
       instance: {
         dbName: 'goaylal',
