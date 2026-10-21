@@ -10,7 +10,7 @@ export enum UserRole {
 
 @Schema({ timestamps: true, collection: 'users' })
 export class User {
-  @Prop({ required: true, unique: true, index: true, lowercase: true, trim: true })
+  @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email: string;
 
   @Prop({ required: false })
@@ -19,7 +19,7 @@ export class User {
   @Prop({ required: false })
   image?: string;
 
-  @Prop({ required: false })
+  @Prop({ required: false, index: true, sparse: true })
   googleId?: string;
 
   @Prop({ required: true, enum: UserRole, default: UserRole.USER })

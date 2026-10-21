@@ -5,7 +5,7 @@ export type SuggestedTripDocument = SuggestedTrip & Document;
 
 @Schema({ timestamps: true, collection: 'suggested_trips' })
 export class SuggestedTrip {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   slug: string; // e.g. 'trip-beijing', 'trip-shanghai'
 
   @Prop({ required: true })

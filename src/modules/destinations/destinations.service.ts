@@ -1,13 +1,13 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
+import { Document, Model, Types } from 'mongoose';
 import { Destination, DestinationDocument } from './schemas/destination.schema.js';
 import { Attraction, AttractionDocument } from './schemas/attraction.schema.js';
 import { Hotel, HotelDocument } from './schemas/hotel.schema.js';
 import { Transport, TransportDocument, TransportType } from './schemas/transport.schema.js';
+import { SuggestedTrip, SuggestedTripDocument } from './schemas/suggested-trip.schema.js';
 import { ALL_DESTINATIONS, SeedDestinationCity } from './all-destinations.data.js';
-
-import { Types } from 'mongoose';
 
 type LeanAttraction = Attraction & { _id: Types.ObjectId };
 type LeanHotel = Hotel & { _id: Types.ObjectId };
@@ -31,10 +31,10 @@ export interface SuggestedTripItem {
   readonly highlights: readonly string[];
 }
 
-import { SuggestedTrip, SuggestedTripDocument } from './schemas/suggested-trip.schema.js';
-
 @Injectable()
 export class DestinationsService implements OnModuleInit {
+  private readonly logger = new Logger(DestinationsService.name);
+
   constructor(
     @InjectModel(Destination.name)
     private readonly destinationModel: Model<DestinationDocument>,
@@ -46,10 +46,13 @@ export class DestinationsService implements OnModuleInit {
     private readonly transportModel: Model<TransportDocument>,
     @InjectModel(SuggestedTrip.name)
     private readonly tripModel: Model<SuggestedTripDocument>,
+    private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.seedAllDestinations();
+    if (this.configService.get<boolean>('seed.onBoot') === true) {
+      await this.seedCatalog();
+    }
   }
 
   async findAll(query?: { countryKey?: string; popular?: boolean }): Promise<Destination[] | SeedDestinationCity[]> {
@@ -59,11 +62,8 @@ export class DestinationsService implements OnModuleInit {
 
     const docs = await this.destinationModel.find(filter).lean<Destination[]>().exec();
     if (docs.length === 0) {
-      // Graceful fallback from in-memory seed catalog
-      return ALL_DESTINATIONS.filter((d) => {
-        if (query?.countryKey && d.countryKey !== query.countryKey) return false;
-        return true;
-      });
+      // Graceful fallback from the in-memory seed catalog
+      return ALL_DESTINATIONS.filter((d) => !query?.countryKey || d.countryKey === query.countryKey);
     }
     return docs;
   }
@@ -77,17 +77,6 @@ export class DestinationsService implements OnModuleInit {
         this.transportModel.find({ destinationKey: key }).lean().exec(),
       ]);
 
-      // Defensive deduplication to guarantee strictly unique items
-      const uniqueTransports = Array.from(
-        new Map((transports as LeanTransport[]).map((t) => [t.type || t.title, t])).values()
-      );
-      const uniqueHotels = Array.from(
-        new Map((hotels as LeanHotel[]).map((h) => [h.starRating ?? h.name, h])).values()
-      );
-      const uniqueAttractions = Array.from(
-        new Map((attractions as LeanAttraction[]).map((a) => [a.name, a])).values()
-      );
-
       return {
         key: destination.key,
         name: destination.name,
@@ -96,18 +85,9 @@ export class DestinationsService implements OnModuleInit {
         flag: destination.flag,
         tag: destination.tag,
         description: destination.description,
-        attractions: uniqueAttractions.map((a) => ({
-          ...a,
-          id: a._id.toString(),
-        })),
-        hotels: uniqueHotels.map((h) => ({
-          ...h,
-          id: h._id.toString(),
-        })),
-        transports: uniqueTransports.map((t) => ({
-          ...t,
-          id: t._id.toString(),
-        })),
+        attractions: (attractions as LeanAttraction[]).map((a) => ({ ...a, id: a._id.toString() })),
+        hotels: (hotels as LeanHotel[]).map((h) => ({ ...h, id: h._id.toString() })),
+        transports: (transports as LeanTransport[]).map((t) => ({ ...t, id: t._id.toString() })),
       };
     }
 
@@ -116,7 +96,6 @@ export class DestinationsService implements OnModuleInit {
     if (seed) {
       return seed;
     }
-
     throw new NotFoundException(`'${key}' аяллын чиглэл олдсонгүй.`);
   }
 
@@ -168,46 +147,36 @@ export class DestinationsService implements OnModuleInit {
     ];
   }
 
-  private async seedAllDestinations(): Promise<void> {
-    // Delete non-Beijing records to strictly keep Beijing
-    await this.destinationModel.deleteMany({ key: { $ne: 'beijing' } }).exec();
-    await this.attractionModel.deleteMany({}).exec();
-    await this.hotelModel.deleteMany({}).exec();
-    await this.transportModel.deleteMany({}).exec();
-
+  /**
+   * Idempotent, non-destructive catalog sync: every seed row is upserted by (destinationKey, seedId),
+   * so database ids stay stable across runs and saved itineraries keep pointing at real attractions.
+   * Rows created by the old delete-and-reinsert seed (no seedId) are adopted by name, never duplicated.
+   */
+  async seedCatalog(): Promise<void> {
     for (const city of ALL_DESTINATIONS) {
-      let destDoc = await this.destinationModel.findOne({ key: city.key }).exec();
-      if (!destDoc) {
-        destDoc = await this.destinationModel.create({
-          key: city.key,
-          name: city.name,
-          country: city.country,
-          countryKey: city.countryKey,
-          flag: city.flag,
-          tag: city.tag,
-          description: city.description ?? `${city.name} аяллын бүрэн хөтөлбөр`,
-          imageUrl: city.attractions[0]?.imageUrl ?? 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d',
-          popular: true,
-        });
-      } else {
-        destDoc.name = city.name;
-        destDoc.tag = city.tag;
-        destDoc.description = city.description ?? destDoc.description;
-        destDoc.imageUrl = city.attractions[0]?.imageUrl ?? destDoc.imageUrl;
-        await destDoc.save();
-      }
+      const destination = await this.destinationModel
+        .findOneAndUpdate(
+          { key: city.key },
+          {
+            $set: {
+              name: city.name,
+              country: city.country,
+              countryKey: city.countryKey,
+              flag: city.flag,
+              tag: city.tag,
+              description: city.description ?? `${city.name} аяллын бүрэн хөтөлбөр`,
+              imageUrl: city.attractions[0]?.imageUrl,
+            },
+            $setOnInsert: { popular: true },
+          },
+          { upsert: true, returnDocument: 'after' },
+        )
+        .exec();
+      const base = { destinationId: destination._id, destinationKey: city.key };
 
-      const destinationId = destDoc._id;
-
-      // Clean existing records for this specific city before re-inserting
-      await this.attractionModel.deleteMany({ destinationKey: city.key }).exec();
-      await this.hotelModel.deleteMany({ destinationKey: city.key }).exec();
-      await this.transportModel.deleteMany({ destinationKey: city.key }).exec();
-
-      await this.attractionModel.insertMany(
-        city.attractions.map((a) => ({
-          destinationId,
-          destinationKey: city.key,
+      for (const a of city.attractions) {
+        await this.upsertSeeded(this.attractionModel, city.key, a.id, 'name', a.name, {
+          ...base,
           name: a.name,
           nameEn: a.nameEn,
           description: a.description,
@@ -219,13 +188,11 @@ export class DestinationsService implements OnModuleInit {
           images: a.images ?? (a.imageUrl ? [a.imageUrl] : []),
           rating: a.rating,
           highlights: a.highlights ?? [],
-        })),
-      );
-
-      await this.hotelModel.insertMany(
-        city.hotels.map((h) => ({
-          destinationId,
-          destinationKey: city.key,
+        });
+      }
+      for (const h of city.hotels) {
+        await this.upsertSeeded(this.hotelModel, city.key, h.id, 'name', h.name, {
+          ...base,
           name: h.name,
           starRating: h.starRating,
           pricePerNight: h.pricePerNight,
@@ -233,13 +200,11 @@ export class DestinationsService implements OnModuleInit {
           locationDesc: h.locationDesc,
           amenities: h.amenities ?? [],
           badge: h.badge,
-        })),
-      );
-
-      await this.transportModel.insertMany(
-        city.transports.map((t) => ({
-          destinationId,
-          destinationKey: city.key,
+        });
+      }
+      for (const t of city.transports) {
+        await this.upsertSeeded(this.transportModel, city.key, t.id, 'title', t.title, {
+          ...base,
           type: (t.type as TransportType) ?? TransportType.FLIGHT,
           title: t.title,
           durationText: t.durationText,
@@ -250,8 +215,30 @@ export class DestinationsService implements OnModuleInit {
           departureFrom: t.departureFrom,
           arrivalAt: t.arrivalAt,
           features: t.features ?? [],
-        })),
-      );
+        });
+      }
+    }
+    this.logger.log(`Catalog synced: ${ALL_DESTINATIONS.length} destinations`);
+  }
+
+  private async upsertSeeded<T extends Document & { seedId?: string }>(
+    model: Model<T>,
+    destinationKey: string,
+    seedId: string,
+    legacyField: 'name' | 'title',
+    legacyValue: string,
+    fields: Record<string, unknown>,
+  ): Promise<void> {
+    const existing =
+      (await model.findOne({ destinationKey, seedId } as Record<string, unknown>).exec()) ??
+      (await model
+        .findOne({ destinationKey, seedId: { $exists: false }, [legacyField]: legacyValue } as Record<string, unknown>)
+        .exec());
+    if (existing) {
+      existing.set({ ...fields, seedId });
+      await existing.save();
+    } else {
+      await new model({ ...fields, seedId }).save();
     }
   }
 }

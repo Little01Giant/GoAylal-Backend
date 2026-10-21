@@ -5,7 +5,7 @@ export type DestinationDocument = Destination & Document;
 
 @Schema({ timestamps: true, collection: 'destinations' })
 export class Destination {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   key: string; // e.g. 'beijing', 'tokyo', 'khuvsgul'
 
   @Prop({ required: true })

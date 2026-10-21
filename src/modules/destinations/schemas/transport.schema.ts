@@ -14,6 +14,10 @@ export class Transport {
   @Prop({ type: Types.ObjectId, ref: 'Destination', required: true, index: true })
   destinationId: Types.ObjectId;
 
+  /** Stable natural id from the seed catalog; makes seeding an idempotent upsert. */
+  @Prop({ required: false })
+  seedId?: string;
+
   @Prop({ required: true, index: true })
   destinationKey: string;
 
@@ -49,3 +53,8 @@ export class Transport {
 }
 
 export const TransportSchema = SchemaFactory.createForClass(Transport);
+
+TransportSchema.index(
+  { destinationKey: 1, seedId: 1 },
+  { unique: true, partialFilterExpression: { seedId: { $type: 'string' } } },
+);

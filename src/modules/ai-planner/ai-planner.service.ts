@@ -9,9 +9,15 @@ import {
   GeneratedPlanSnapshot,
 } from './schemas/chat-session.schema.js';
 import { DestinationsService } from '../destinations/destinations.service.js';
+import { CityNotRecognizedError, parseTripRequest } from './trip-request.parser.js';
+
+const MAX_SESSION_MESSAGES = 100;
+const MAX_HISTORY_CHARS = 2000;
 
 export interface AiChatResult {
   readonly sessionId: Types.ObjectId | string;
+  /** Transitional alias of sessionId for clients following the documented `conversationId` name. */
+  readonly conversationId: Types.ObjectId | string;
   readonly messageId: Types.ObjectId | string;
   readonly role: 'assistant';
   readonly content: string;
@@ -127,9 +133,17 @@ export class AiPlannerService {
   }
 
   async chat(message: string, sessionId?: string, userId?: string): Promise<AiChatResult> {
-    let session = sessionId && Types.ObjectId.isValid(sessionId)
-      ? await this.chatSessionModel.findById(sessionId)
-      : null;
+    let session =
+      sessionId && Types.ObjectId.isValid(sessionId) ? await this.chatSessionModel.findById(sessionId) : null;
+    if (session?.userId && session.userId.toString() !== userId) {
+      // Someone else's conversation: start a fresh one instead of exposing or extending it.
+      session = null;
+    } else if (session && !session.userId && userId) {
+      session.userId = new Types.ObjectId(userId);
+    }
+    if (session && session.messages.length >= MAX_SESSION_MESSAGES) {
+      session = null;
+    }
 
     if (!session) {
       session = new this.chatSessionModel({
@@ -147,46 +161,18 @@ export class AiPlannerService {
       quickSuggestions: [],
     });
 
-    // 2. Intelligent destination keyword detection
+    // 2. Destination, trip length and party size come from the message; no city means ask, not guess
+    const { cityKey, days, travelers } = parseTripRequest(message);
     const normalized = message.toLowerCase();
-    let cityKey = 'beijing';
-    if (normalized.includes('шанхай') || normalized.includes('shanghai')) {
-      cityKey = 'shanghai';
-    } else if (normalized.includes('токио') || normalized.includes('tokyo') || normalized.includes('япон') || normalized.includes('japan')) {
-      cityKey = 'tokyo';
-    } else if (normalized.includes('сөүл') || normalized.includes('seoul') || normalized.includes('солонгос') || normalized.includes('korea')) {
-      cityKey = 'seoul';
-    } else if (normalized.includes('бангкок') || normalized.includes('bangkok') || normalized.includes('тайланд') || normalized.includes('thailand') || normalized.includes('пхукет') || normalized.includes('phuket')) {
-      cityKey = 'bangkok';
-    } else if (normalized.includes('дананг') || normalized.includes('danang') || normalized.includes('хой ан') || normalized.includes('hoi an')) {
-      cityKey = 'danang';
-    } else if (normalized.includes('ханой') || normalized.includes('hanoi') || normalized.includes('халонг') || normalized.includes('halong')) {
-      cityKey = 'hanoi';
-    } else if (normalized.includes('дубай') || normalized.includes('dubai') || normalized.includes('эмират') || normalized.includes('uae')) {
-      cityKey = 'dubai';
-    } else if (normalized.includes('хөвсгөл') || normalized.includes('нуур') || normalized.includes('khuvsgul')) {
-      cityKey = 'khuvsgul';
-    } else if (normalized.includes('бээжин') || normalized.includes('beijing') || normalized.includes('хятад') || normalized.includes('china')) {
-      cityKey = 'beijing';
-    }
-
-    // Parse days & travelers
-    let days = 5;
-    if (normalized.includes('3') || normalized.includes('гурав')) days = 3;
-    else if (normalized.includes('6') || normalized.includes('зургаа')) days = 6;
-    else if (normalized.includes('7') || normalized.includes('долоо')) days = 7;
-    else if (normalized.includes('10') || normalized.includes('арав')) days = 10;
-
-    let travelers = 2;
-    if (normalized.includes('1 хүн') || normalized.includes('ганцаараа')) travelers = 1;
-    else if (normalized.includes('3 хүн') || normalized.includes('3 найз')) travelers = 3;
-    else if (normalized.includes('4 хүн') || normalized.includes('гэр бүл')) travelers = 4;
 
     let planData: GeneratedPlanSnapshot | undefined = undefined;
     let destinationContext = '';
     let quickSuggestions: string[] = [];
 
     try {
+      if (!cityKey) {
+        throw new CityNotRecognizedError();
+      }
       const city = await this.destinationsService.findByKey(cityKey);
       destinationContext = `Чиглэл: ${city.name} (${city.country}). Үзвэрүүд: ${city.attractions?.slice(0, 3).map((a) => a.name).join(', ')}. Буудал: ${city.hotels?.[0]?.name ?? 'Standard Hotel'}, Тээвэр: ${city.transports?.[0]?.title ?? 'Standard Flight'}`;
 
@@ -336,7 +322,10 @@ export class AiPlannerService {
         `${hotel?.name ?? 'Буудал'} сонголтыг өөрчлөх`,
         `${city.name} аяллын хөтөлбөрийг хадгалах`,
       ];
-    } catch {
+    } catch (err) {
+      if (!(err instanceof CityNotRecognizedError)) {
+        this.logger.warn(`Plan generation failed for "${cityKey}": ${err instanceof Error ? err.message : String(err)}`);
+      }
       quickSuggestions = [
         'Бээжин 5 өдөр 2 хүн төлөвлөх',
         'Токио 6 өдөр аялах зардал',
@@ -347,7 +336,7 @@ export class AiPlannerService {
     // 3. Call AI
     const history = session.messages.map((m) => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: m.content.slice(0, MAX_HISTORY_CHARS),
     }));
 
     const deepSeekReply = await this.callDeepSeek(history, message, destinationContext);
@@ -384,6 +373,7 @@ export class AiPlannerService {
 
     return {
       sessionId: session._id,
+      conversationId: session._id,
       messageId: assistantMessage._id,
       role: 'assistant',
       content: aiResponseText,
