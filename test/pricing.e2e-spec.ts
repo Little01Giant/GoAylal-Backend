@@ -157,6 +157,7 @@ describe('Admin pricing: plans, discounts, payment settings and bulk actions', (
     it('charges the full plan price when no discount applies', async () => {
       const res = await (await guestInvoice()).body.data;
       expect(res.amount).toBe(BASE);
+      expect(res).toMatchObject({ baseAmount: BASE, discountAmount: 0, discountName: null });
       const stored = await trx(res.transactionId);
       expect(stored).toMatchObject({ amount: BASE, baseAmount: BASE, discountAmount: 0, planName: 'Төлөвлөгөө нээх' });
       expect(stored?.discountId).toBeUndefined();
@@ -180,6 +181,8 @@ describe('Admin pricing: plans, discounts, payment settings and bulk actions', (
       const res = await guestInvoice();
       expect(res.status).toBe(201);
       expect(res.body.data.amount).toBe(BASE - 3000);
+      // The invoice response carries the breakdown so the payment dialog can show the saving.
+      expect(res.body.data).toMatchObject({ baseAmount: BASE, discountAmount: 3000, discountName: '3000₮ хямдрал' });
       const stored = await trx(res.body.data.transactionId);
       expect(stored).toMatchObject({
         amount: BASE - 3000,
