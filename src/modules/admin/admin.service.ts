@@ -18,7 +18,17 @@ import {
   SuggestedTrip,
   SuggestedTripDocument,
 } from '../destinations/schemas/suggested-trip.schema.js';
-import { PaymentsService, PaymentVerificationResult } from '../payments/payments.service.js';
+import {
+  PaymentsService,
+  type BulkTransactionsResult,
+  type PaymentVerificationResult,
+} from '../payments/payments.service.js';
+import {
+  PaymentSettingsService,
+  type EffectivePaymentSettings,
+} from '../payments/payment-settings.service.js';
+import type { UpdatePaymentSettingsDto } from '../payments/dto/update-payment-settings.dto.js';
+import type { BulkTransactionsDto } from './dto/bulk-transactions.dto.js';
 import { CreateSuggestedTripDto } from './dto/create-suggested-trip.dto.js';
 import { UpdateSuggestedTripDto } from './dto/update-suggested-trip.dto.js';
 import type { AdminTransactionsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto.js';
@@ -72,6 +82,7 @@ export class AdminService implements OnModuleInit {
     @InjectModel(SuggestedTrip.name)
     private readonly tripModel: Model<SuggestedTripDocument>,
     private readonly paymentsService: PaymentsService,
+    private readonly paymentSettings: PaymentSettingsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -211,6 +222,26 @@ export class AdminService implements OnModuleInit {
   /** Re-checks the payment with QPay; settles it if (and only if) QPay confirms. */
   async recheckTransaction(id: string): Promise<PaymentVerificationResult> {
     return this.paymentsService.verifyPayment(id);
+  }
+
+  /** One action over many transactions; the payment rules (QPay-confirmed settlement) stay in PaymentsService. */
+  async bulkTransactions(dto: BulkTransactionsDto): Promise<BulkTransactionsResult> {
+    switch (dto.action) {
+      case 'recheck':
+        return this.paymentsService.recheckMany(dto.ids);
+      case 'expire-pending':
+        return this.paymentsService.expirePendingMany(dto.ids);
+      case 'mark-refunded':
+        return this.paymentsService.markRefundedMany(dto.ids);
+    }
+  }
+
+  async getPaymentSettings(): Promise<EffectivePaymentSettings> {
+    return this.paymentSettings.getEffective();
+  }
+
+  async updatePaymentSettings(dto: UpdatePaymentSettingsDto): Promise<EffectivePaymentSettings> {
+    return this.paymentSettings.update(dto);
   }
 
   /** Users with their completed-payment totals, using two grouped queries for the whole page. */
