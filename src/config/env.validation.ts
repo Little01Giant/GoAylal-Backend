@@ -78,6 +78,10 @@ export function validateEnv(env: EnvInput): EnvInput {
     if (isTruthy(env.ALLOW_DEV_ADMIN_TOKEN)) {
       errors.push('ALLOW_DEV_ADMIN_TOKEN must not be enabled in production');
     }
+    // Guest checkout defaults to on; production must opt in or out explicitly so it is never left on by accident.
+    if (!['true', 'false', '1', '0', 'yes', 'no'].includes(text(env, 'GUEST_CHECKOUT_ENABLED').toLowerCase())) {
+      errors.push('GUEST_CHECKOUT_ENABLED must be set explicitly (true or false) in production');
+    }
     for (const key of ['QPAY_CLIENT_ID', 'QPAY_CLIENT_SECRET', 'QPAY_INVOICE_CODE', 'QPAY_CALLBACK_URL']) {
       if (!text(env, key)) {
         errors.push(`${key} is required in production`);

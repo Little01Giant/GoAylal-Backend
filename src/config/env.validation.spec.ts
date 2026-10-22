@@ -12,6 +12,7 @@ const productionEnv = (overrides: Record<string, unknown> = {}): Record<string, 
   QPAY_CLIENT_SECRET: 'secret',
   QPAY_INVOICE_CODE: 'code',
   QPAY_CALLBACK_URL: 'https://api.example.invalid/api/v1/payments/qpay/callback',
+  GUEST_CHECKOUT_ENABLED: 'false',
   ...overrides,
 });
 
@@ -55,6 +56,12 @@ describe('validateEnv', () => {
   it('refuses mock QPay and the dev admin token in production', () => {
     expect(() => validateEnv(productionEnv({ QPAY_MOCK: 'true' }))).toThrow(/QPAY_MOCK/);
     expect(() => validateEnv(productionEnv({ ALLOW_DEV_ADMIN_TOKEN: 'true' }))).toThrow(/ALLOW_DEV_ADMIN_TOKEN/);
+  });
+
+  it('requires GUEST_CHECKOUT_ENABLED to be set explicitly in production', () => {
+    expect(() => validateEnv(productionEnv({ GUEST_CHECKOUT_ENABLED: undefined }))).toThrow(/GUEST_CHECKOUT_ENABLED/);
+    expect(() => validateEnv(productionEnv({ GUEST_CHECKOUT_ENABLED: 'maybe' }))).toThrow(/GUEST_CHECKOUT_ENABLED/);
+    expect(() => validateEnv(productionEnv({ GUEST_CHECKOUT_ENABLED: 'true' }))).not.toThrow();
   });
 
   it('validates NODE_ENV, the fee and the port', () => {
