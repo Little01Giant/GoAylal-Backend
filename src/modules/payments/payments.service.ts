@@ -6,6 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { createHash } from 'node:crypto';
 import { Model, Types } from 'mongoose';
@@ -34,8 +35,6 @@ const ULAANBAATAR_OFFSET_MS = 8 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 100;
 /** QPay is an external call, so a bulk re-check runs a few at a time rather than all at once. */
 const RECHECK_CONCURRENCY = 5;
-/** The status poll asks QPay about one invoice at most this often (QPay asks integrators not to poll). */
-const QPAY_CHECK_MIN_INTERVAL_MS = 20_000;
 const DEFAULT_TITLE = 'GoAylal аяллын бүрэн төлөвлөгөө';
 
 export interface QPayInvoiceResult {
@@ -120,7 +119,18 @@ export class PaymentsService {
     private readonly emailService: ItineraryEmailService,
     private readonly pricing: PricingService,
     private readonly settings: PaymentSettingsService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * How long the status poll leaves QPay alone for one invoice, in ms. QPay forbids checking payments repeatedly:
+   * `payment/check` is for after its callback. So by default (0) the poll never asks QPay and the payment is
+   * settled by the callback (or by the payer pressing the check button). A positive value is an opt-in safety net
+   * for a callback that never arrives.
+   */
+  private get statusCheckIntervalMs(): number {
+    return (this.configService.get<number>('qpay.statusCheckIntervalSeconds') ?? 0) * 1000;
+  }
 
   /** Atomic, instance-safe reference numbers: TRX-2026-1021-0001 / INV-2026-1021-0001. */
   private async nextReferences(): Promise<{ transactionNumber: string; invoiceNumber: string }> {
@@ -249,30 +259,39 @@ export class PaymentsService {
   }
 
   /**
-   * Status for the payment dialog's poll. It reads our own record, and asks QPay only when the last check was
-   * more than QPAY_CHECK_MIN_INTERVAL_MS ago, so a dialog left open does not hammer QPay. Normally the callback
-   * has already settled the payment; this is the safety net if it never arrived.
+   * Status for the payment dialog's poll. It reads our own record. QPay is asked only for an invoice that has
+   * waited QPAY_STATUS_CHECK_INTERVAL_S, and then at most once per interval, so a dialog left open does not
+   * hammer QPay. Normally the callback has already settled the payment; this is the safety net if it never arrived.
    */
   async getPaymentStatus(identifier: string): Promise<PaymentVerificationResult> {
     const transaction = await this.findTransaction(identifier);
     if (!transaction) {
       throw new NotFoundException('Гүйлгээ олдсонгүй.');
     }
-    if (transaction.status === PaymentStatus.PENDING && (await this.claimQpayCheck(transaction._id as Types.ObjectId))) {
+    const interval = this.statusCheckIntervalMs;
+    // The callback normally settles the payment within seconds, so QPay is not asked until the invoice has
+    // been waiting a full interval, and then at most once per interval.
+    const waitedLongEnough = Date.now() - (transaction.createdAt?.getTime() ?? 0) >= interval;
+    if (
+      interval > 0 &&
+      transaction.status === PaymentStatus.PENDING &&
+      waitedLongEnough &&
+      (await this.claimQpayCheck(transaction._id as Types.ObjectId, interval))
+    ) {
       return this.verifyTransaction(transaction, false);
     }
     return this.toVerification(transaction);
   }
 
   /** Atomically reserves the right to ask QPay about this invoice now; false when it was asked recently. */
-  private async claimQpayCheck(transactionId: Types.ObjectId): Promise<boolean> {
+  private async claimQpayCheck(transactionId: Types.ObjectId, intervalMs: number): Promise<boolean> {
     const claimed = await this.paymentModel.findOneAndUpdate(
       {
         _id: transactionId,
         status: PaymentStatus.PENDING,
         $or: [
           { lastQpayCheckAt: { $exists: false } },
-          { lastQpayCheckAt: { $lte: new Date(Date.now() - QPAY_CHECK_MIN_INTERVAL_MS) } },
+          { lastQpayCheckAt: { $lte: new Date(Date.now() - intervalMs) } },
         ],
       },
       { $set: { lastQpayCheckAt: new Date() } },

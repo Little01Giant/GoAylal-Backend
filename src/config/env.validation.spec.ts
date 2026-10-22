@@ -73,6 +73,14 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...base, UNLOCK_FEE_MNT: '20000', PORT: '4000' })).not.toThrow();
   });
 
+  it('validates QPAY_STATUS_CHECK_INTERVAL_S as a whole number of seconds', () => {
+    const base = { JWT_SECRET: strongSecret() };
+    expect(() => validateEnv({ ...base, QPAY_STATUS_CHECK_INTERVAL_S: '0' })).not.toThrow();
+    expect(() => validateEnv({ ...base, QPAY_STATUS_CHECK_INTERVAL_S: '60' })).not.toThrow();
+    expect(() => validateEnv({ ...base, QPAY_STATUS_CHECK_INTERVAL_S: '-5' })).toThrow(/QPAY_STATUS_CHECK_INTERVAL_S/);
+    expect(() => validateEnv({ ...base, QPAY_STATUS_CHECK_INTERVAL_S: 'abc' })).toThrow(/QPAY_STATUS_CHECK_INTERVAL_S/);
+  });
+
   it('reports every problem at once', () => {
     expect(() => validateEnv({ NODE_ENV: 'production' })).toThrow(/JWT_SECRET[\s\S]*MONGODB_URI[\s\S]*QPAY_CLIENT_ID/);
   });

@@ -45,6 +45,9 @@ export default () => {
       invoiceCode: process.env.QPAY_INVOICE_CODE ?? 'GO_AYLAL_INVOICE',
       callbackUrl: process.env.QPAY_CALLBACK_URL ?? 'http://localhost:4000/api/v1/payments/qpay/callback',
       mock: !isProduction && isTruthy(process.env.QPAY_MOCK),
+      // QPay forbids checking payments repeatedly: payment/check is only for after its callback. So the dialog's
+      // status poll never asks QPay by default (0). A positive value turns on a slow safety-net check.
+      statusCheckIntervalSeconds: parseInt(process.env.QPAY_STATUS_CHECK_INTERVAL_S ?? '0', 10),
     },
     pricing: {
       unlockFeeMnt: parseInt(process.env.UNLOCK_FEE_MNT ?? String(DEFAULT_UNLOCK_FEE_MNT), 10),

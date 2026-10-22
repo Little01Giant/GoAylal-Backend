@@ -14,7 +14,7 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
   let counter = 0;
 
   beforeAll(async () => {
-    ctx = await createTestApp({ GUEST_CHECKOUT_ENABLED: 'true' });
+    ctx = await createTestApp({ GUEST_CHECKOUT_ENABLED: 'true', QPAY_STATUS_CHECK_INTERVAL_S: '20' });
     admin = await ctx.makeUser(ADMIN_EMAIL, { role: UserRole.ADMIN });
   });
   afterAll(async () => ctx.close());
@@ -73,8 +73,19 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
   });
 
   describe('status poll', () => {
-    it('asks QPay at most once per interval however often the dialog polls', async () => {
+    it('does not ask QPay at all for an invoice that is still within its first interval', async () => {
       const inv = await newInvoice();
+      const before = ctx.qpay.checks;
+      for (let i = 0; i < 6; i++) {
+        const res = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+        expect(res.body.data).toMatchObject({ verified: false, status: 'pending' });
+      }
+      expect(ctx.qpay.checks).toBe(before);
+    });
+
+    it('asks QPay at most once per interval once the invoice has waited that long', async () => {
+      const inv = await newInvoice();
+      await age(inv.id, 'createdAt', 30_000);
       const before = ctx.qpay.checks;
       for (let i = 0; i < 6; i++) {
         const res = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
@@ -82,7 +93,7 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
       }
       expect(ctx.qpay.checks - before).toBe(1);
 
-      // After the interval has passed, the next poll may ask again.
+      // After another interval has passed, the next poll may ask again.
       await age(inv.id, 'lastQpayCheckAt', 25_000);
       await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
       expect(ctx.qpay.checks - before).toBe(2);
@@ -90,6 +101,7 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
 
     it('is the safety net when the callback never arrives: it settles a paid invoice', async () => {
       const inv = await newInvoice();
+      await age(inv.id, 'createdAt', 30_000);
       ctx.qpay.paid.add(inv.qpayInvoiceId);
       const res = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
       expect(res.body.data).toMatchObject({ verified: true, status: 'completed' });
@@ -98,6 +110,7 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
 
     it('does not ask QPay about a settled invoice and 404s an unknown one', async () => {
       const inv = await newInvoice();
+      await age(inv.id, 'createdAt', 30_000);
       ctx.qpay.paid.add(inv.qpayInvoiceId);
       await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
       const before = ctx.qpay.checks;
@@ -143,5 +156,50 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
       expect(res.body.data).toMatchObject({ received: true, verified: true });
       expect(await status(inv.id)).toBe(PaymentStatus.COMPLETED);
     });
+  });
+});
+
+describe('QPay flow with the default QPAY_STATUS_CHECK_INTERVAL_S (callback only, as QPay requires)', () => {
+  let ctx: TestContext;
+
+  beforeAll(async () => {
+    ctx = await createTestApp({ GUEST_CHECKOUT_ENABLED: 'true' });
+  });
+  afterAll(async () => ctx.close());
+
+  it('never asks QPay from the status poll, however long the invoice has waited; the callback still settles', async () => {
+    const res = await ctx.http
+      .post(INVOICE)
+      .send({ email: 'callback-only@example.test', planSnapshot: { destinationName: 'CB', grandTotalCost: 1 } })
+      .expect(201);
+    const id = res.body.data.transactionId as string;
+    const invoiceId = res.body.data.qpayInvoice.invoiceId as string;
+    await ctx.payments.collection.updateOne({ _id: new Types.ObjectId(id) }, { $set: { createdAt: new Date(Date.now() - 3_600_000) } });
+
+    ctx.qpay.paid.add(invoiceId);
+    const before = ctx.qpay.checks;
+    for (let i = 0; i < 4; i++) {
+      const poll = await ctx.http.get(`${STATUS}/${id}`).expect(200);
+      expect(poll.body.data).toMatchObject({ verified: false, status: 'pending' });
+    }
+    expect(ctx.qpay.checks).toBe(before);
+
+    const callback = await ctx.http.post(`${CALLBACK}/${res.body.data.invoiceNumber}`).expect(200);
+    expect(callback.body.data.verified).toBe(true);
+    const poll = await ctx.http.get(`${STATUS}/${id}`).expect(200);
+    expect(poll.body.data).toMatchObject({ verified: true, status: 'completed' });
+  });
+
+  it('also accepts the base callback URL with ?payment_id=<our invoice number>, the form in QPay\'s own example', async () => {
+    const res = await ctx.http
+      .post(INVOICE)
+      .send({ email: 'query-style@example.test', planSnapshot: { destinationName: 'QS', grandTotalCost: 2 } })
+      .expect(201);
+    ctx.qpay.paid.add(res.body.data.qpayInvoice.invoiceId as string);
+    const get = await ctx.http.get(`${CALLBACK}?payment_id=${res.body.data.invoiceNumber}`).expect(200);
+    expect(get.body.data).toMatchObject({ received: true, verified: true });
+    const post = await ctx.http.post(`${CALLBACK}?payment_id=${res.body.data.invoiceNumber}`).expect(200);
+    expect(post.body.data.verified).toBe(true);
+    await ctx.http.get(`${CALLBACK}?payment_id=INV-0000-0000-0000`).expect(404);
   });
 });

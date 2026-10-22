@@ -57,6 +57,11 @@ export function validateEnv(env: EnvInput): EnvInput {
     errors.push('UNLOCK_FEE_MNT must be a positive integer (MNT)');
   }
 
+  const statusInterval = text(env, 'QPAY_STATUS_CHECK_INTERVAL_S');
+  if (statusInterval && !/^\d{1,4}$/.test(statusInterval)) {
+    errors.push('QPAY_STATUS_CHECK_INTERVAL_S must be a whole number of seconds (0 = rely on the callback only)');
+  }
+
   const port = text(env, 'PORT');
   if (port && !/^\d{1,5}$/.test(port)) {
     errors.push('PORT must be a number');

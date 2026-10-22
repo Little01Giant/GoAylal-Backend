@@ -48,8 +48,22 @@ export class PaymentsController {
   async qpayCallback(
     @Body() body: QPayCallbackDto,
     @Query('qpay_payment_id') queryPaymentId?: string,
+    @Query('payment_id') queryOwnId?: string,
   ): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
-    return this.paymentsService.handleCallback(body.payment_id ?? queryPaymentId);
+    return this.paymentsService.handleCallback(body.payment_id ?? queryOwnId ?? queryPaymentId);
+  }
+
+  /** The base callback URL may also be called with GET and `?payment_id=<our id>`, the form in QPay's own example. */
+  @Get('qpay/callback')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(60)
+  @ApiOperation({ summary: 'QPay Webhook (GET, ?payment_id=<манай дугаар>): POST-тэй ижил боловсруулалт' })
+  @ApiResponse({ status: 200, description: 'Webhook боловсруулагдлаа.' })
+  async qpayCallbackGet(
+    @Query('payment_id') queryOwnId?: string,
+    @Query('qpay_payment_id') queryPaymentId?: string,
+  ): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
+    return this.paymentsService.handleCallback(queryOwnId ?? queryPaymentId);
   }
 
   @Post('qpay/callback/:invoiceNumber')
@@ -85,7 +99,8 @@ export class PaymentsController {
   @RateLimit(120)
   @ApiOperation({
     summary: 'Төлбөрийн төлөв (хуудасны шалгалтад): QPay-г зөвхөн хааяа асууна',
-    description: 'Манай бүртгэлээс уншина. QPay-аас сүүлд шалгасан хугацаанаас 20 секунд өнгөрсөн бол л QPay-аас асууна.',
+    description:
+      'Манай бүртгэлээс уншина. QPay-аас зөвхөн нэхэмжлэх QPAY_STATUS_CHECK_INTERVAL_S секунд хүлээгдсэний дараа, тэр хугацаанд нэг л удаа асууна (0 = хэзээ ч асуухгүй, зөвхөн callback).',
   })
   @ApiParam({ name: 'transactionId', description: 'Гүйлгээний дугаар эсвэл ID' })
   @ApiResponse({ status: 200, description: 'Төлбөрийн төлөв' })
