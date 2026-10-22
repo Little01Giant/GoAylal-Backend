@@ -14,6 +14,9 @@ describe('Catalog: idempotent seeding and public contract', () => {
   let hotels: Model<HotelDocument>;
   let transports: Model<TransportDocument>;
   const city = ALL_DESTINATIONS[0]!;
+  const totalAttractions = ALL_DESTINATIONS.reduce((n, c) => n + c.attractions.length, 0);
+  const totalHotels = ALL_DESTINATIONS.reduce((n, c) => n + c.hotels.length, 0);
+  const totalTransports = ALL_DESTINATIONS.reduce((n, c) => n + c.transports.length, 0);
 
   beforeAll(async () => {
     ctx = await createTestApp();
@@ -31,15 +34,15 @@ describe('Catalog: idempotent seeding and public contract', () => {
   it('seeds everything once, then re-seeding changes nothing: same rows, same _ids', async () => {
     await service.seedCatalog();
     const idsAfterFirst = (await attractions.find().sort({ seedId: 1 }).lean()).map((a) => a._id.toString());
-    expect(idsAfterFirst).toHaveLength(city.attractions.length);
-    expect(await hotels.countDocuments()).toBe(city.hotels.length);
-    expect(await transports.countDocuments()).toBe(city.transports.length);
+    expect(idsAfterFirst).toHaveLength(totalAttractions);
+    expect(await hotels.countDocuments()).toBe(totalHotels);
+    expect(await transports.countDocuments()).toBe(totalTransports);
 
     await service.seedCatalog();
     await service.seedCatalog();
     const idsAfterThird = (await attractions.find().sort({ seedId: 1 }).lean()).map((a) => a._id.toString());
     expect(idsAfterThird).toEqual(idsAfterFirst);
-    expect(await hotels.countDocuments()).toBe(city.hotels.length);
+    expect(await hotels.countDocuments()).toBe(totalHotels);
   });
 
   it('adopts rows written by the old delete-and-reinsert seed instead of duplicating them', async () => {
@@ -58,7 +61,7 @@ describe('Catalog: idempotent seeding and public contract', () => {
     });
 
     await service.seedCatalog();
-    expect(await attractions.countDocuments()).toBe(city.attractions.length);
+    expect(await attractions.countDocuments()).toBe(totalAttractions);
     const adopted = await attractions.findById(inserted.insertedId).lean();
     expect(adopted?.seedId).toBe(legacy.id);
     expect(adopted?.estimatedCost).toBe(legacy.estimatedCost);
