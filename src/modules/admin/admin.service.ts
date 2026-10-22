@@ -37,6 +37,53 @@ import { DestinationsService } from '../destinations/destinations.service.js';
 import type { UpsertDestinationDto } from './dto/upsert-destination.dto.js';
 import { escapeRegex } from '../../common/utils/escape-regex.js';
 
+const INITIAL_TRIPS = [
+  {
+    slug: 'trip-beijing',
+    title: 'Бээжин хотын аяллын хөтөлбөр',
+    destination: 'Бээжин хот, Хятад',
+    country: 'Хятад',
+    countryKey: 'china',
+    countryFlag: '🇨🇳',
+    durationText: '3 – 10 өдөр',
+    daysCount: 5,
+    category: 'historical',
+    categoryLabel: 'Бэлэн төлөвлөгөө',
+    startingPrice: 1348250,
+    imageUrl: 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=800&q=80',
+    rating: 4.9,
+    reviewsCount: 184,
+    highlights: [
+      'Цагаан хэрэм (Мутяньюй кабель зам & чарга)',
+      'Хориотой хот (Хааны ордны музей)',
+      'Юниверсал Студио Бээжин бүрэн өдөр',
+      'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
+    ],
+  },
+  {
+    slug: 'trip-shanghai',
+    title: 'Шанхай хотын аяллын хөтөлбөр',
+    destination: 'Шанхай хот, Хятад',
+    country: 'Хятад',
+    countryKey: 'china',
+    countryFlag: '🇨🇳',
+    durationText: '3 – 10 өдөр',
+    daysCount: 5,
+    category: 'city',
+    categoryLabel: 'Бэлэн төлөвлөгөө',
+    startingPrice: 2163000,
+    imageUrl: 'https://pub-83fca96d5b9048f795fabbfcdabba275.r2.dev/attractions/sh-att-02/1.webp',
+    rating: 4.8,
+    reviewsCount: 0,
+    highlights: [
+      'Вайтань далан',
+      'Диснейн амралтын газар',
+      'Шанхайн цамхаг',
+      'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
+    ],
+  },
+] as const;
+
 export interface AdminStatsResult {
   readonly totalUsers: number;
   readonly totalTransactions: number;
@@ -118,37 +165,17 @@ export class AdminService implements OnModuleInit {
     }
   }
 
-  /** Seeds the first curated trip only into an empty collection. */
+  /**
+   * Adds the curated trips that are not in the database yet (matched by slug), so a trip added in a release
+   * reaches databases that already have trips. Existing rows are never changed; to hide a trip, deactivate it.
+   */
   private async seedInitialTrips(): Promise<void> {
     try {
-      if ((await this.tripModel.countDocuments()) > 0) {
-        return;
+      for (const trip of INITIAL_TRIPS) {
+        if (await this.tripModel.exists({ slug: trip.slug })) continue;
+        await this.tripModel.create({ ...trip, highlights: [...trip.highlights], isActive: true });
+        this.logger.log(`Бэлэн аяллын хөтөлбөр үүсгэгдлээ: ${trip.slug}`);
       }
-      await this.tripModel.create({
-        slug: 'trip-beijing',
-        title: 'Бээжин хотын аяллын хөтөлбөр',
-        destination: 'Бээжин хот, Хятад',
-        country: 'Хятад',
-        countryKey: 'china',
-        countryFlag: '🇨🇳',
-        durationText: '3 – 10 өдөр',
-        daysCount: 5,
-        category: 'historical',
-        categoryLabel: 'Бэлэн төлөвлөгөө',
-        startingPrice: 1348250,
-        imageUrl:
-          'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=800&q=80',
-        rating: 4.9,
-        reviewsCount: 184,
-        highlights: [
-          'Цагаан хэрэм (Мутяньюй кабель зам & чарга)',
-          'Хориотой хот (Хааны ордны музей)',
-          'Юниверсал Студио Бээжин бүрэн өдөр',
-          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
-        ],
-        isActive: true,
-      });
-      this.logger.log('Анхны бэлэн аяллын хөтөлбөр (Бээжин) үүсгэгдлээ.');
     } catch (err) {
       this.logger.warn(`seedInitialTrips error: ${String(err)}`);
     }

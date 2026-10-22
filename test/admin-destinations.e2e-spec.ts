@@ -1,3 +1,7 @@
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { AdminService } from '../src/modules/admin/admin.service.js';
+import { SuggestedTrip, type SuggestedTripDocument } from '../src/modules/destinations/schemas/suggested-trip.schema.js';
 import { UserRole } from '../src/modules/auth/schemas/user.schema.js';
 import { ADMIN_EMAIL, bearer, createTestApp, type TestContext, type TestUser } from './helpers/test-app.js';
 
@@ -103,5 +107,25 @@ describe('Admin destinations: add and edit a city in the database', () => {
     await put('test-city', city({ attractions: [attraction(1), attraction(1)] })).expect(400);
     await put('test-city', city({ hotels: [{ id: 'h', name: 'x', starRating: 9, pricePerNight: 1, imageUrl: IMG, locationDesc: 'x', amenities: [] }] })).expect(400);
     await put('test-city', city({ transports: [{ id: 't', type: 'rocket', title: 'x', durationText: 'x', pricePerPerson: 1 }] })).expect(400);
+  });
+
+  describe('ready-made trips', () => {
+    const ids = async (): Promise<string[]> =>
+      ((await ctx.http.get('/api/v1/destinations/suggested-trips').expect(200)).body.data as { id: string }[]).map((t) => t.id);
+
+    it('lists the curated Beijing and Shanghai trips from the database', async () => {
+      expect(await ids()).toEqual(expect.arrayContaining(['trip-beijing', 'trip-shanghai']));
+    });
+
+    it('adds a missing curated trip to a database that already has trips, and never changes existing ones', async () => {
+      const trips = ctx.app.get<Model<SuggestedTripDocument>>(getModelToken(SuggestedTrip.name));
+      await trips.deleteOne({ slug: 'trip-shanghai' });
+      await trips.updateOne({ slug: 'trip-beijing' }, { $set: { title: 'Өөрчилсөн гарчиг', isActive: false } });
+
+      await ctx.app.get(AdminService).onModuleInit();
+
+      expect(await ids()).toContain('trip-shanghai');
+      expect(await trips.findOne({ slug: 'trip-beijing' }).lean()).toMatchObject({ title: 'Өөрчилсөн гарчиг', isActive: false });
+    });
   });
 });
