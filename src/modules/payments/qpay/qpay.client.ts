@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { buildInvoiceCallbackUrl } from './qpay-callback-url.js';
 
 export interface QPayBankUrl {
   readonly name: string;
@@ -57,7 +58,10 @@ export class QPayClient {
       invoice_receiver_code: 'terminal',
       invoice_description: input.description,
       amount: input.amount,
-      callback_url: this.configService.get<string>('qpay.callbackUrl'),
+      callback_url: buildInvoiceCallbackUrl(
+        this.configService.get<string>('qpay.callbackUrl') ?? '',
+        input.invoiceNumber,
+      ),
     });
 
     const data = (await response.json()) as {
@@ -78,6 +82,31 @@ export class QPayClient {
       shortUrl: data.qPay_shortUrl ?? '',
       urls: Array.isArray(data.urls) ? data.urls : [],
     };
+  }
+
+  /**
+   * Cancels an unpaid invoice at QPay (`DELETE /invoice/{invoice_id}`) so it can no longer be paid after we
+   * gave up on it. Best effort: a failure is logged and reported as false, never thrown.
+   */
+  async cancelInvoice(invoiceId: string): Promise<boolean> {
+    if (this.isMock) {
+      return true;
+    }
+    try {
+      const token = await this.getToken();
+      const baseUrl = this.configService.getOrThrow<string>('qpay.baseUrl');
+      const response = await fetch(`${baseUrl}/invoice/${encodeURIComponent(invoiceId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        this.logger.warn(`QPay invoice cancel returned ${response.status}`);
+      }
+      return response.ok;
+    } catch (err) {
+      this.logger.warn(`QPay invoice cancel failed: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
   }
 
   /** True only when QPay itself reports a paid payment for this invoice covering the expected amount. */

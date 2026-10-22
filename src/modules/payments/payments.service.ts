@@ -34,6 +34,8 @@ const ULAANBAATAR_OFFSET_MS = 8 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 100;
 /** QPay is an external call, so a bulk re-check runs a few at a time rather than all at once. */
 const RECHECK_CONCURRENCY = 5;
+/** The status poll asks QPay about one invoice at most this often (QPay asks integrators not to poll). */
+const QPAY_CHECK_MIN_INTERVAL_MS = 20_000;
 const DEFAULT_TITLE = 'GoAylal аяллын бүрэн төлөвлөгөө';
 
 export interface QPayInvoiceResult {
@@ -231,6 +233,61 @@ export class PaymentsService {
     return { received: true, verified: result.verified, transactionNumber: result.transactionNumber };
   }
 
+  /**
+   * QPay webhook for one invoice. The invoice number is in the URL we gave QPay, so the transaction is found
+   * without reading QPay's payload; the payment is then re-checked with QPay before anything is settled.
+   */
+  async handleInvoiceCallback(
+    invoiceNumber: string,
+  ): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
+    const transaction = await this.paymentModel.findOne({ invoiceNumber });
+    if (!transaction) {
+      throw new NotFoundException('Харгалзах гүйлгээ олдсонгүй.');
+    }
+    const result = await this.verifyTransaction(transaction, false);
+    return { received: true, verified: result.verified, transactionNumber: result.transactionNumber };
+  }
+
+  /**
+   * Status for the payment dialog's poll. It reads our own record, and asks QPay only when the last check was
+   * more than QPAY_CHECK_MIN_INTERVAL_MS ago, so a dialog left open does not hammer QPay. Normally the callback
+   * has already settled the payment; this is the safety net if it never arrived.
+   */
+  async getPaymentStatus(identifier: string): Promise<PaymentVerificationResult> {
+    const transaction = await this.findTransaction(identifier);
+    if (!transaction) {
+      throw new NotFoundException('Гүйлгээ олдсонгүй.');
+    }
+    if (transaction.status === PaymentStatus.PENDING && (await this.claimQpayCheck(transaction._id as Types.ObjectId))) {
+      return this.verifyTransaction(transaction, false);
+    }
+    return this.toVerification(transaction);
+  }
+
+  /** Atomically reserves the right to ask QPay about this invoice now; false when it was asked recently. */
+  private async claimQpayCheck(transactionId: Types.ObjectId): Promise<boolean> {
+    const claimed = await this.paymentModel.findOneAndUpdate(
+      {
+        _id: transactionId,
+        status: PaymentStatus.PENDING,
+        $or: [
+          { lastQpayCheckAt: { $exists: false } },
+          { lastQpayCheckAt: { $lte: new Date(Date.now() - QPAY_CHECK_MIN_INTERVAL_MS) } },
+        ],
+      },
+      { $set: { lastQpayCheckAt: new Date() } },
+    );
+    return claimed !== null;
+  }
+
+  /** Closes invoices we gave up on at QPay too, so they cannot be paid later. Best effort, a few at a time. */
+  private async cancelAtQpay(transactions: readonly PaymentTransactionDocument[]): Promise<void> {
+    const invoiceIds = transactions.map((t) => t.qpayInvoiceId).filter((id): id is string => !!id);
+    for (let start = 0; start < invoiceIds.length; start += RECHECK_CONCURRENCY) {
+      await Promise.all(invoiceIds.slice(start, start + RECHECK_CONCURRENCY).map((id) => this.qpay.cancelInvoice(id)));
+    }
+  }
+
   /** Re-checks every selected pending payment with QPay (a few at a time) and settles the paid ones. */
   async recheckMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
     const { transactions, missingIds } = await this.loadByIds(ids);
@@ -255,7 +312,8 @@ export class PaymentsService {
     const pending = transactions.filter((t) => t.status === PaymentStatus.PENDING);
     const results = await this.verifyInChunks(pending);
     const settled = results.filter((r) => r.verified).length;
-    const unpaid = pending.filter((_, index) => results[index]?.verified !== true).map((t) => t._id as Types.ObjectId);
+    const unpaidDocs = pending.filter((_, index) => results[index]?.verified !== true);
+    const unpaid = unpaidDocs.map((t) => t._id as Types.ObjectId);
 
     const res =
       unpaid.length > 0
@@ -263,6 +321,7 @@ export class PaymentsService {
             .updateMany({ _id: { $in: unpaid }, status: PaymentStatus.PENDING }, { $set: { status: PaymentStatus.EXPIRED } })
             .exec()
         : null;
+    await this.cancelAtQpay(unpaidDocs);
     const modified = res?.modifiedCount ?? 0;
     return {
       requested: ids.length,
@@ -394,7 +453,9 @@ export class PaymentsService {
     transaction: PaymentTransactionDocument,
     simulate: boolean,
   ): Promise<PaymentVerificationResult> {
-    if (transaction.status === PaymentStatus.PENDING) {
+    // An invoice we expired can still turn out to be paid (paid before it was cancelled, or an older
+    // invoice that was never cancelled at QPay): the money arrived, so it is settled rather than ignored.
+    if (transaction.status === PaymentStatus.PENDING || transaction.status === PaymentStatus.EXPIRED) {
       const paid =
         (simulate && this.qpay.isMock) ||
         (!!transaction.qpayInvoiceId && (await this.qpay.isInvoicePaid(transaction.qpayInvoiceId, transaction.amount)));
@@ -414,7 +475,7 @@ export class PaymentsService {
    */
   private async settle(transactionId: Types.ObjectId): Promise<PaymentTransactionDocument | null> {
     const settled = await this.paymentModel.findOneAndUpdate(
-      { _id: transactionId, status: PaymentStatus.PENDING },
+      { _id: transactionId, status: { $in: [PaymentStatus.PENDING, PaymentStatus.EXPIRED] } },
       { $set: { status: PaymentStatus.COMPLETED, paidAt: new Date() } },
       { returnDocument: 'after' },
     );
@@ -478,6 +539,7 @@ export class PaymentsService {
       { _id: pending._id, status: PaymentStatus.PENDING },
       { $set: { status: PaymentStatus.EXPIRED } },
     );
+    await this.cancelAtQpay([pending]);
     return null;
   }
 

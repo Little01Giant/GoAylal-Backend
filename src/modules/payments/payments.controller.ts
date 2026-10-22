@@ -52,6 +52,47 @@ export class PaymentsController {
     return this.paymentsService.handleCallback(body.payment_id ?? queryPaymentId);
   }
 
+  @Post('qpay/callback/:invoiceNumber')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard)
+  @RateLimit(60)
+  @ApiOperation({
+    summary: 'QPay Webhook (нэхэмжлэх тус бүрийн хаяг): QPay-ийн агуулгад итгэхгүй, QPay-аар дахин баталгаажуулна',
+  })
+  @ApiParam({ name: 'invoiceNumber', description: 'Манай нэхэмжлэхийн дугаар (INV-...)' })
+  @ApiResponse({ status: 200, description: 'Webhook боловсруулагдлаа.' })
+  async qpayInvoiceCallbackPost(
+    @Param('invoiceNumber') invoiceNumber: string,
+  ): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
+    return this.paymentsService.handleInvoiceCallback(invoiceNumber);
+  }
+
+  /** QPay may call the callback URL with GET; the handling is identical. */
+  @Get('qpay/callback/:invoiceNumber')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(60)
+  @ApiOperation({ summary: 'QPay Webhook (GET хэлбэр): POST-тэй ижил боловсруулалт' })
+  @ApiParam({ name: 'invoiceNumber', description: 'Манай нэхэмжлэхийн дугаар (INV-...)' })
+  @ApiResponse({ status: 200, description: 'Webhook боловсруулагдлаа.' })
+  async qpayInvoiceCallbackGet(
+    @Param('invoiceNumber') invoiceNumber: string,
+  ): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
+    return this.paymentsService.handleInvoiceCallback(invoiceNumber);
+  }
+
+  @Get('status/:transactionId')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(120)
+  @ApiOperation({
+    summary: 'Төлбөрийн төлөв (хуудасны шалгалтад): QPay-г зөвхөн хааяа асууна',
+    description: 'Манай бүртгэлээс уншина. QPay-аас сүүлд шалгасан хугацаанаас 20 секунд өнгөрсөн бол л QPay-аас асууна.',
+  })
+  @ApiParam({ name: 'transactionId', description: 'Гүйлгээний дугаар эсвэл ID' })
+  @ApiResponse({ status: 200, description: 'Төлбөрийн төлөв' })
+  async getPaymentStatus(@Param('transactionId') transactionId: string): Promise<PaymentVerificationResult> {
+    return this.paymentsService.getPaymentStatus(transactionId);
+  }
+
   @Post('verify/:transactionId')
   @HttpCode(200)
   @UseGuards(RateLimitGuard)
