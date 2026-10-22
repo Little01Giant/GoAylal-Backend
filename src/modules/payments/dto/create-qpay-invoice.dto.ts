@@ -2,10 +2,17 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsNumber, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /**
- * Pricing is server-side: the unlock fee comes from configuration. The amount-like fields below
- * are accepted only because the current frontend still sends them; they are ignored.
+ * Pricing is server-side: the amount comes from the chosen pricing plan (the default plan when none is
+ * given) minus its best live discount. The amount-like fields below are accepted only because the
+ * current frontend still sends them; they are ignored.
  */
 export class CreateQPayInvoiceDto {
+  @ApiPropertyOptional({ description: 'Сонгосон үнийн төлөвлөгөөний ID (өгөөгүй бол үндсэн төлөвлөгөө)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  planId?: string | undefined;
+
   @ApiPropertyOptional({ description: 'Хадгалсан аяллын хөтөлбөрийн ID (нэвтэрсэн хэрэглэгчийн өөрийн хөтөлбөр)' })
   @IsOptional()
   @IsString()

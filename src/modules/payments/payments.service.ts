@@ -7,7 +7,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { Model, Types } from 'mongoose';
 import {
@@ -20,8 +19,11 @@ import { Counter, CounterDocument } from './schemas/counter.schema.js';
 import { Itinerary, ItineraryDocument, ItineraryStatus } from '../itineraries/schemas/itinerary.schema.js';
 import { CreateQPayInvoiceDto } from './dto/create-qpay-invoice.dto.js';
 import { ItineraryEmailService } from './itinerary-email.service.js';
+import { PaymentSettingsService } from './payment-settings.service.js';
 import { QPayClient, type QPayBankUrl } from './qpay/qpay.client.js';
+import { PricingService, type PriceQuote } from '../pricing/pricing.service.js';
 import { sanitizePlanSnapshot } from './plan-snapshot.js';
+import { isDuplicateKeyError } from '../../common/utils/is-duplicate-key-error.js';
 import { UserRole } from '../auth/schemas/user.schema.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 
@@ -30,7 +32,8 @@ const INVOICE_REUSE_WINDOW_MS = 15 * 60 * 1000;
 /** Reference numbers are numbered per calendar day in Ulaanbaatar time (UTC+8). */
 const ULAANBAATAR_OFFSET_MS = 8 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 100;
-const DUPLICATE_KEY_ERROR = 11000;
+/** QPay is an external call, so a bulk re-check runs a few at a time rather than all at once. */
+const RECHECK_CONCURRENCY = 5;
 const DEFAULT_TITLE = 'GoAylal аяллын бүрэн төлөвлөгөө';
 
 export interface QPayInvoiceResult {
@@ -71,6 +74,18 @@ export interface PaymentVerificationResult {
   readonly status: string;
 }
 
+export interface BulkTransactionsResult {
+  readonly requested: number;
+  readonly matched: number;
+  /** Transactions whose status this action changed (settled / expired / refunded). */
+  readonly modified: number;
+  /** Transactions found to be paid at QPay and completed during this action. */
+  readonly settled: number;
+  /** Found but not eligible for the action (e.g. already completed), left untouched. */
+  readonly skipped: number;
+  readonly missingIds: readonly string[];
+}
+
 const STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
   [PaymentStatus.PENDING]: 'Хүлээгдэж буй',
   [PaymentStatus.COMPLETED]: 'Амжилттай',
@@ -78,10 +93,6 @@ const STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
   [PaymentStatus.EXPIRED]: 'Хугацаа дууссан',
   [PaymentStatus.REFUNDED]: 'Буцаагдсан',
 };
-
-function isDuplicateKeyError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === DUPLICATE_KEY_ERROR;
-}
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -98,14 +109,11 @@ export class PaymentsService {
     private readonly itineraryModel: Model<ItineraryDocument>,
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
-    private readonly configService: ConfigService,
     private readonly qpay: QPayClient,
     private readonly emailService: ItineraryEmailService,
+    private readonly pricing: PricingService,
+    private readonly settings: PaymentSettingsService,
   ) {}
-
-  private get unlockFee(): number {
-    return this.configService.getOrThrow<number>('pricing.unlockFeeMnt');
-  }
 
   /** Atomic, instance-safe reference numbers: TRX-2026-1021-0001 / INV-2026-1021-0001. */
   private async nextReferences(): Promise<{ transactionNumber: string; invoiceNumber: string }> {
@@ -119,11 +127,12 @@ export class PaymentsService {
   }
 
   /**
-   * Creates the unlock-fee invoice. The amount is always the server-side fee. Authenticated payers
-   * are tied to their own itinerary; guests are allowed only while GUEST_CHECKOUT_ENABLED (transitional).
+   * Creates the unlock-fee invoice. The amount is always the server-side price of the chosen (or default)
+   * pricing plan after its best live discount. Authenticated payers are tied to their own itinerary;
+   * guests are allowed only while guest checkout is enabled (dashboard setting, else GUEST_CHECKOUT_ENABLED).
    */
   async createQPayInvoice(dto: CreateQPayInvoiceDto, user?: AuthenticatedUser): Promise<QPayInvoiceResult> {
-    if (!user && this.configService.get<boolean>('payments.guestCheckoutEnabled') !== true) {
+    if (!user && !(await this.settings.getEffective()).guestCheckoutEnabled) {
       throw new UnauthorizedException('Төлбөр хийхийн тулд нэвтэрсэн байх шаардлагатай.');
     }
 
@@ -139,12 +148,13 @@ export class PaymentsService {
       ? `u:${user.sub}|${itinerary?._id.toString() ?? planHash}`
       : `g:${email}|${planHash}`;
 
-    const reusable = await this.reuseOrExpirePending(dedupeKey);
+    const quote = await this.pricing.quote(dto.planId);
+    const reusable = await this.reuseOrExpirePending(dedupeKey, quote);
     if (reusable) {
       return this.toInvoiceResult(reusable);
     }
 
-    const amount = this.unlockFee;
+    const amount = quote.finalPrice;
     const title = dto.title?.trim() || DEFAULT_TITLE;
     const { transactionNumber, invoiceNumber } = await this.nextReferences();
     const invoice = await this.qpay.createInvoice({
@@ -160,6 +170,13 @@ export class PaymentsService {
         itineraryId: itinerary?._id,
         userId: user ? new Types.ObjectId(user.sub) : undefined,
         amount,
+        planId: new Types.ObjectId(quote.planId),
+        planName: quote.planName,
+        planDurationDays: quote.durationDays,
+        baseAmount: quote.basePrice,
+        discountAmount: quote.discountAmount,
+        discountId: quote.discountId ? new Types.ObjectId(quote.discountId) : undefined,
+        discountName: quote.discountName ?? undefined,
         currency: 'MNT',
         method: PaymentMethod.QPAY,
         status: PaymentStatus.PENDING,
@@ -207,6 +224,90 @@ export class PaymentsService {
     }
     const result = await this.verifyTransaction(transaction, false);
     return { received: true, verified: result.verified, transactionNumber: result.transactionNumber };
+  }
+
+  /** Re-checks every selected pending payment with QPay (a few at a time) and settles the paid ones. */
+  async recheckMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
+    const { transactions, missingIds } = await this.loadByIds(ids);
+    const pending = transactions.filter((t) => t.status === PaymentStatus.PENDING);
+    const settled = (await this.verifyInChunks(pending)).filter((r) => r.verified).length;
+    return {
+      requested: ids.length,
+      matched: transactions.length,
+      modified: settled,
+      settled,
+      skipped: transactions.length - pending.length,
+      missingIds,
+    };
+  }
+
+  /**
+   * Closes stale pending invoices. Each is re-checked with QPay first, so a payment made after the modal
+   * closed is settled instead of expired; only the still-unpaid ones become `expired`, in one write.
+   */
+  async expirePendingMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
+    const { transactions, missingIds } = await this.loadByIds(ids);
+    const pending = transactions.filter((t) => t.status === PaymentStatus.PENDING);
+    const results = await this.verifyInChunks(pending);
+    const settled = results.filter((r) => r.verified).length;
+    const unpaid = pending.filter((_, index) => results[index]?.verified !== true).map((t) => t._id as Types.ObjectId);
+
+    const res =
+      unpaid.length > 0
+        ? await this.paymentModel
+            .updateMany({ _id: { $in: unpaid }, status: PaymentStatus.PENDING }, { $set: { status: PaymentStatus.EXPIRED } })
+            .exec()
+        : null;
+    const modified = res?.modifiedCount ?? 0;
+    return {
+      requested: ids.length,
+      matched: transactions.length,
+      modified,
+      settled,
+      skipped: transactions.length - settled - modified,
+      missingIds,
+    };
+  }
+
+  /** Records a manual refund. It only marks the payment: money is returned through QPay/the bank by support. */
+  async markRefundedMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
+    const { transactions, missingIds } = await this.loadByIds(ids);
+    const res = await this.paymentModel
+      .updateMany(
+        { _id: { $in: transactions.map((t) => t._id) }, status: PaymentStatus.COMPLETED },
+        { $set: { status: PaymentStatus.REFUNDED } },
+      )
+      .exec();
+    return {
+      requested: ids.length,
+      matched: transactions.length,
+      modified: res.modifiedCount,
+      settled: 0,
+      skipped: transactions.length - res.modifiedCount,
+      missingIds,
+    };
+  }
+
+  private async loadByIds(
+    ids: readonly string[],
+  ): Promise<{ transactions: PaymentTransactionDocument[]; missingIds: string[] }> {
+    const transactions = await this.paymentModel
+      .find({ _id: { $in: ids.map((id) => new Types.ObjectId(id)) } })
+      .exec();
+    const present = new Set(transactions.map((t) => String(t._id)));
+    return { transactions, missingIds: ids.filter((id) => !present.has(id)) };
+  }
+
+  /** Verifies in the order given, `RECHECK_CONCURRENCY` at a time. */
+  private async verifyInChunks(
+    transactions: readonly PaymentTransactionDocument[],
+  ): Promise<PaymentVerificationResult[]> {
+    const results: PaymentVerificationResult[] = [];
+    for (let start = 0; start < transactions.length; start += RECHECK_CONCURRENCY) {
+      const chunk = transactions.slice(start, start + RECHECK_CONCURRENCY);
+      results.push(...(await Promise.all(chunk.map((t) => this.verifyTransaction(t, false)))));
+    }
+    return results;
   }
 
   async findUserPayments(user: AuthenticatedUser): Promise<PaymentHistoryItemDto[]> {
@@ -327,7 +428,7 @@ export class PaymentsService {
       );
     }
 
-    if (this.configService.get<boolean>('payments.emailEnabled') === true && transaction.customerEmail) {
+    if ((await this.settings.getEffective()).emailEnabled && transaction.customerEmail) {
       const snapshot = transaction.planSnapshot ?? {};
       try {
         await this.emailService.sendItineraryEmail({
@@ -353,13 +454,15 @@ export class PaymentsService {
    * with QPay (the payer may have paid after the modal closed): if paid it is settled and returned,
    * otherwise it is expired so a fresh invoice can be created.
    */
-  private async reuseOrExpirePending(dedupeKey: string): Promise<PaymentTransactionDocument | null> {
+  private async reuseOrExpirePending(dedupeKey: string, quote: PriceQuote): Promise<PaymentTransactionDocument | null> {
     const pending = await this.paymentModel.findOne({ dedupeKey, status: PaymentStatus.PENDING });
     if (!pending) {
       return null;
     }
+    // An invoice is also stale once the plan or its price changed (the admin edited pricing since).
+    const sameQuote = pending.amount === quote.finalPrice && String(pending.planId ?? '') === quote.planId;
     const age = Date.now() - (pending.createdAt?.getTime() ?? 0);
-    if (age < INVOICE_REUSE_WINDOW_MS) {
+    if (age < INVOICE_REUSE_WINDOW_MS && sameQuote) {
       return pending;
     }
     const result = await this.verifyTransaction(pending, false);

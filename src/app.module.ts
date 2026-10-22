@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { DestinationsModule } from './modules/destinations/destinations.module.js';
 import { ItinerariesModule } from './modules/itineraries/itineraries.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
+import { PricingModule } from './modules/pricing/pricing.module.js';
 import { AiPlannerModule } from './modules/ai-planner/ai-planner.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
 import { AppController } from './app.controller.js';
@@ -37,6 +38,7 @@ import { resolveMongoUri } from './config/database.helper.js';
     AuthModule,
     DestinationsModule,
     ItinerariesModule,
+    PricingModule,
     PaymentsModule,
     AiPlannerModule,
     AdminModule,

@@ -23,9 +23,12 @@ import { CreateSuggestedTripDto } from './dto/create-suggested-trip.dto.js';
 import { UpdateSuggestedTripDto } from './dto/update-suggested-trip.dto.js';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
 import { AdminTransactionsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto.js';
+import { BulkTransactionsDto } from './dto/bulk-transactions.dto.js';
+import { UpdatePaymentSettingsDto } from '../payments/dto/update-payment-settings.dto.js';
 import type { PaymentTransactionDocument } from '../payments/schemas/payment-transaction.schema.js';
 import type { SuggestedTripDocument } from '../destinations/schemas/suggested-trip.schema.js';
-import type { PaymentVerificationResult } from '../payments/payments.service.js';
+import type { BulkTransactionsResult, PaymentVerificationResult } from '../payments/payments.service.js';
+import type { EffectivePaymentSettings } from '../payments/payment-settings.service.js';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -46,6 +49,30 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Гүйлгээнүүдийн жагсаалт' })
   async getTransactions(@Query() query: AdminTransactionsQueryDto): Promise<Page<PaymentTransactionDocument>> {
     return this.adminService.getTransactions(query);
+  }
+
+  @Post('transactions/bulk')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Олон гүйлгээнд нэг дор үйлдэл хийх (дахин шалгах / хугацаа дууссан болгох / буцаагдсан гэж тэмдэглэх)',
+  })
+  @ApiResponse({ status: 200, description: 'Нэгдсэн үр дүн' })
+  async bulkTransactions(@Body() dto: BulkTransactionsDto): Promise<BulkTransactionsResult> {
+    return this.adminService.bulkTransactions(dto);
+  }
+
+  @Get('payment-settings')
+  @ApiOperation({ summary: 'Төлбөрийн тохиргоо (хүчинтэй утга ба эх сурвалж)' })
+  @ApiResponse({ status: 200, description: 'Төлбөрийн тохиргоо' })
+  async getPaymentSettings(): Promise<EffectivePaymentSettings> {
+    return this.adminService.getPaymentSettings();
+  }
+
+  @Put('payment-settings')
+  @ApiOperation({ summary: 'Төлбөрийн тохиргоо өөрчлөх (null = .env утгыг дахин ашиглах)' })
+  @ApiResponse({ status: 200, description: 'Шинэчлэгдсэн тохиргоо' })
+  async updatePaymentSettings(@Body() dto: UpdatePaymentSettingsDto): Promise<EffectivePaymentSettings> {
+    return this.adminService.updatePaymentSettings(dto);
   }
 
   @Get('transactions/:id')

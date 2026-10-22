@@ -52,7 +52,29 @@ export class PaymentTransaction {
   userId?: Types.ObjectId;
 
   @Prop({ type: Number, required: true })
-  amount: number; // in MNT ₮, always the server-side unlock fee
+  amount: number; // in MNT ₮: the server-side plan price after discounts
+
+  /** Pricing breakdown captured at invoice time; later plan or discount edits never rewrite history. */
+  @Prop({ type: Types.ObjectId, ref: 'PricingPlan', required: false })
+  planId?: Types.ObjectId;
+
+  @Prop({ required: false })
+  planName?: string;
+
+  @Prop({ type: Number, required: false })
+  planDurationDays?: number;
+
+  @Prop({ type: Number, required: false })
+  baseAmount?: number;
+
+  @Prop({ type: Number, required: false })
+  discountAmount?: number;
+
+  @Prop({ type: Types.ObjectId, ref: 'Discount', required: false })
+  discountId?: Types.ObjectId;
+
+  @Prop({ required: false })
+  discountName?: string;
 
   @Prop({ default: 'MNT' })
   currency: string;
