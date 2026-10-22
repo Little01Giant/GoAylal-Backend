@@ -11,6 +11,7 @@ import {
 } from '../destinations/schemas/suggested-trip.schema.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { DestinationsModule } from '../destinations/destinations.module.js';
 import { AdminService } from './admin.service.js';
 import { AdminController } from './admin.controller.js';
 import { AdminGuard } from './guards/admin.guard.js';
@@ -24,6 +25,7 @@ import { AdminGuard } from './guards/admin.guard.js';
     ]),
     PaymentsModule,
     AuthModule,
+    DestinationsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminGuard],

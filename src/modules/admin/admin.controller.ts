@@ -21,6 +21,7 @@ import {
 import { AdminGuard } from './guards/admin.guard.js';
 import { CreateSuggestedTripDto } from './dto/create-suggested-trip.dto.js';
 import { UpdateSuggestedTripDto } from './dto/update-suggested-trip.dto.js';
+import { UpsertDestinationDto } from './dto/upsert-destination.dto.js';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
 import { AdminTransactionsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto.js';
 import { BulkTransactionsDto } from './dto/bulk-transactions.dto.js';
@@ -113,6 +114,26 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Бэлэн аяллын хөтөлбөрүүд' })
   async getTrips(): Promise<SuggestedTripDocument[]> {
     return this.adminService.getTrips();
+  }
+
+  @Get('destinations')
+  @ApiOperation({ summary: 'Мэдээллийн сан дахь хотуудын жагсаалт (үзвэр, буудал, тээврийн тоотой)' })
+  @ApiResponse({ status: 200, description: 'Хотуудын жагсаалт' })
+  async getDestinations(): ReturnType<AdminService['getDestinations']> {
+    return this.adminService.getDestinations();
+  }
+
+  @Put('destinations/:key')
+  @ApiOperation({
+    summary: 'Хот + үзвэр, буудал, тээврийг мэдээллийн санд нэмэх/засах (код өөрчлөхгүй). id-аар таарна, жагсаалтад байхгүй мөрийг хөндөхгүй.',
+  })
+  @ApiParam({ name: 'key', description: 'Хотын түлхүүр код (жишээ: shanghai)' })
+  @ApiResponse({ status: 200, description: 'Хот хадгалагдлаа' })
+  async upsertDestination(
+    @Param('key') key: string,
+    @Body() dto: UpsertDestinationDto,
+  ): ReturnType<AdminService['upsertDestination']> {
+    return this.adminService.upsertDestination(key, dto);
   }
 
   @Post('trips')

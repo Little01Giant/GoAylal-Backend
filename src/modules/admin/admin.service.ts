@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -32,6 +33,8 @@ import type { BulkTransactionsDto } from './dto/bulk-transactions.dto.js';
 import { CreateSuggestedTripDto } from './dto/create-suggested-trip.dto.js';
 import { UpdateSuggestedTripDto } from './dto/update-suggested-trip.dto.js';
 import type { AdminTransactionsQueryDto, AdminUsersQueryDto } from './dto/admin-query.dto.js';
+import { DestinationsService } from '../destinations/destinations.service.js';
+import type { UpsertDestinationDto } from './dto/upsert-destination.dto.js';
 import { escapeRegex } from '../../common/utils/escape-regex.js';
 
 export interface AdminStatsResult {
@@ -84,6 +87,7 @@ export class AdminService implements OnModuleInit {
     private readonly paymentsService: PaymentsService,
     private readonly paymentSettings: PaymentSettingsService,
     private readonly configService: ConfigService,
+    private readonly destinations: DestinationsService,
   ) {}
 
   private get adminEmails(): string[] {
@@ -329,6 +333,29 @@ export class AdminService implements OnModuleInit {
     await user.save();
     const id = user._id.toString();
     return { id, _id: id, email: user.email, name: user.name, role: user.role, isActive: user.isActive };
+  }
+
+  getDestinations(): ReturnType<DestinationsService['listCatalog']> {
+    return this.destinations.listCatalog();
+  }
+
+  /** Adds or updates a whole city in the database; no code change or redeploy needed. */
+  async upsertDestination(key: string, dto: UpsertDestinationDto): Promise<{ key: string; attractions: number; hotels: number; transports: number }> {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || key.length > 64) {
+      throw new BadRequestException('Хотын түлхүүр зөвхөн жижиг латин үсэг, тоо, зураас агуулна.');
+    }
+    for (const [label, ids] of [
+      ['үзвэр', dto.attractions.map((a) => a.id)],
+      ['буудал', dto.hotels.map((h) => h.id)],
+      ['тээвэр', dto.transports.map((t) => t.id)],
+    ] as const) {
+      if (new Set(ids).size !== ids.length) {
+        throw new BadRequestException(`Ижил id-тай ${label} давхардсан байна.`);
+      }
+    }
+    const { popular, ...city } = dto;
+    await this.destinations.upsertCity({ ...city, key }, popular === undefined ? {} : { popular });
+    return { key, attractions: dto.attractions.length, hotels: dto.hotels.length, transports: dto.transports.length };
   }
 
   async getTrips(): Promise<SuggestedTripDocument[]> {

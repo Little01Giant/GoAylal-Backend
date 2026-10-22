@@ -72,7 +72,7 @@ export class DestinationsService implements OnModuleInit {
     const destination = await this.destinationModel.findOne({ key }).lean().exec();
     if (destination) {
       const [attractions, hotels, transports] = await Promise.all([
-        this.attractionModel.find({ destinationKey: key }).lean().exec(),
+        this.attractionModel.find({ destinationKey: key }).sort({ rank: 1, _id: 1 }).lean().exec(),
         this.hotelModel.find({ destinationKey: key }).lean().exec(),
         this.transportModel.find({ destinationKey: key }).lean().exec(),
       ]);
@@ -176,71 +176,99 @@ export class DestinationsService implements OnModuleInit {
    */
   async seedCatalog(): Promise<void> {
     for (const city of ALL_DESTINATIONS) {
-      const destination = await this.destinationModel
-        .findOneAndUpdate(
-          { key: city.key },
-          {
-            $set: {
-              name: city.name,
-              country: city.country,
-              countryKey: city.countryKey,
-              flag: city.flag,
-              tag: city.tag,
-              description: city.description ?? `${city.name} аяллын бүрэн хөтөлбөр`,
-              imageUrl: city.attractions[0]?.imageUrl,
-            },
-            $setOnInsert: { popular: true },
-          },
-          { upsert: true, returnDocument: 'after' },
-        )
-        .exec();
-      const base = { destinationId: destination._id, destinationKey: city.key };
-
-      for (const a of city.attractions) {
-        await this.upsertSeeded(this.attractionModel, city.key, a.id, 'name', a.name, {
-          ...base,
-          name: a.name,
-          nameEn: a.nameEn,
-          description: a.description,
-          category: a.category,
-          region: a.region ?? city.name,
-          estimatedCost: a.estimatedCost,
-          estimatedHours: a.estimatedHours,
-          imageUrl: a.imageUrl,
-          images: a.images ?? (a.imageUrl ? [a.imageUrl] : []),
-          rating: a.rating,
-          highlights: a.highlights ?? [],
-        });
-      }
-      for (const h of city.hotels) {
-        await this.upsertSeeded(this.hotelModel, city.key, h.id, 'name', h.name, {
-          ...base,
-          name: h.name,
-          starRating: h.starRating,
-          pricePerNight: h.pricePerNight,
-          imageUrl: h.imageUrl,
-          locationDesc: h.locationDesc,
-          amenities: h.amenities ?? [],
-          badge: h.badge,
-        });
-      }
-      for (const t of city.transports) {
-        await this.upsertSeeded(this.transportModel, city.key, t.id, 'title', t.title, {
-          ...base,
-          type: (t.type as TransportType) ?? TransportType.FLIGHT,
-          title: t.title,
-          durationText: t.durationText,
-          pricePerPerson: t.pricePerPerson,
-          description: t.description,
-          badge: t.badge,
-          provider: t.provider,
-          departureFrom: t.departureFrom,
-          arrivalAt: t.arrivalAt,
-          features: t.features ?? [],
-        });
-      }
+      await this.upsertCity(city);
     }
     this.logger.log(`Catalog synced: ${ALL_DESTINATIONS.length} destinations`);
+  }
+
+  /**
+   * Adds or updates one city with its attractions, hotels and transports, keyed by (destinationKey, item id).
+   * Items missing from `city` are left untouched, so saved itineraries keep pointing at real rows.
+   * Shared by the seed script and the admin API, so a city can live in the database without a code change.
+   */
+  async upsertCity(city: SeedDestinationCity, options: { popular?: boolean } = {}): Promise<void> {
+    const firstAttraction = [...city.attractions].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))[0];
+    const destination = await this.destinationModel
+      .findOneAndUpdate(
+        { key: city.key },
+        {
+          $set: {
+            name: city.name,
+            country: city.country,
+            countryKey: city.countryKey,
+            flag: city.flag,
+            tag: city.tag,
+            description: city.description ?? `${city.name} аяллын бүрэн хөтөлбөр`,
+            imageUrl: firstAttraction?.imageUrl,
+            ...(options.popular === undefined ? {} : { popular: options.popular }),
+          },
+          ...(options.popular === undefined ? { $setOnInsert: { popular: true } } : {}),
+        },
+        { upsert: true, returnDocument: 'after' },
+      )
+      .exec();
+    const base = { destinationId: destination._id, destinationKey: city.key };
+
+    for (const a of city.attractions) {
+      await this.upsertSeeded(this.attractionModel, city.key, a.id, 'name', a.name, {
+        ...base,
+        rank: a.rank,
+        name: a.name,
+        nameEn: a.nameEn,
+        description: a.description,
+        category: a.category,
+        region: a.region ?? city.name,
+        estimatedCost: a.estimatedCost,
+        estimatedHours: a.estimatedHours,
+        imageUrl: a.imageUrl,
+        images: a.images ?? (a.imageUrl ? [a.imageUrl] : []),
+        rating: a.rating,
+        highlights: a.highlights ?? [],
+      });
+    }
+    for (const h of city.hotels) {
+      await this.upsertSeeded(this.hotelModel, city.key, h.id, 'name', h.name, {
+        ...base,
+        name: h.name,
+        starRating: h.starRating,
+        pricePerNight: h.pricePerNight,
+        imageUrl: h.imageUrl,
+        locationDesc: h.locationDesc,
+        amenities: h.amenities ?? [],
+        badge: h.badge,
+      });
+    }
+    for (const t of city.transports) {
+      await this.upsertSeeded(this.transportModel, city.key, t.id, 'title', t.title, {
+        ...base,
+        type: (t.type as TransportType) ?? TransportType.FLIGHT,
+        title: t.title,
+        durationText: t.durationText,
+        pricePerPerson: t.pricePerPerson,
+        description: t.description,
+        badge: t.badge,
+        provider: t.provider,
+        departureFrom: t.departureFrom,
+        arrivalAt: t.arrivalAt,
+        features: t.features ?? [],
+      });
+    }
+  }
+
+  async listCatalog(): Promise<
+    { key: string; name: string; popular: boolean; attractions: number; hotels: number; transports: number }[]
+  > {
+    const destinations = await this.destinationModel.find().sort({ createdAt: 1 }).lean().exec();
+    return Promise.all(
+      destinations.map(async (d) => {
+        const [attractions, hotels, transports] = await Promise.all([
+          this.attractionModel.countDocuments({ destinationKey: d.key }),
+          this.hotelModel.countDocuments({ destinationKey: d.key }),
+          this.transportModel.countDocuments({ destinationKey: d.key }),
+        ]);
+        return { key: d.key, name: d.name, popular: d.popular, attractions, hotels, transports };
+      }),
+    );
   }
 
   private async upsertSeeded<T extends Document & { seedId?: string }>(

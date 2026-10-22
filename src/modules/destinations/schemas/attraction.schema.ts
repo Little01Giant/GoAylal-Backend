@@ -24,6 +24,10 @@ export class Attraction {
   @Prop({ required: true, index: true })
   destinationKey: string; // 'beijing'
 
+  /** Popularity order within the city (1 = first); the planner preselects the first 10. */
+  @Prop({ type: Number, required: false, index: true })
+  rank?: number;
+
   @Prop({ required: true })
   name: string; // 'Цагаан хэрэм'
 
