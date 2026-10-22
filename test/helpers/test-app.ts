@@ -38,7 +38,11 @@ export const ADMIN_EMAIL = 'admin@example.test';
 /** Stand-in for the QPay HTTP client: paid invoices are controlled by the test. */
 export class FakeQPay {
   readonly paid = new Set<string>();
+  /** Invoices cancelled at QPay (`DELETE /invoice/{id}`). */
+  readonly cancelled = new Set<string>();
   invoicesCreated = 0;
+  /** How many times QPay was asked whether an invoice is paid. */
+  checks = 0;
   isMock = false;
 
   async createInvoice(input: CreateQPayInvoiceInput): Promise<QPayInvoice> {
@@ -53,7 +57,13 @@ export class FakeQPay {
   }
 
   async isInvoicePaid(invoiceId: string): Promise<boolean> {
+    this.checks += 1;
     return this.paid.has(invoiceId);
+  }
+
+  async cancelInvoice(invoiceId: string): Promise<boolean> {
+    this.cancelled.add(invoiceId);
+    return true;
   }
 }
 

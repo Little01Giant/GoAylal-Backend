@@ -92,6 +92,10 @@ export class PaymentTransaction {
   @Prop({ required: false })
   qpayInvoiceId?: string;
 
+  /** When QPay was last asked about this invoice by the status poll; spaces those checks out. */
+  @Prop({ type: Date, required: false })
+  lastQpayCheckAt?: Date;
+
   @Prop({ required: false })
   qpayQrText?: string;
 
