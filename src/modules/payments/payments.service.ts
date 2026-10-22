@@ -40,7 +40,12 @@ export interface QPayInvoiceResult {
   readonly transactionId: Types.ObjectId | string;
   readonly transactionNumber: string;
   readonly invoiceNumber: string;
+  /** What the payer is charged (after any discount). */
   readonly amount: number;
+  /** The plan price before the discount; equal to `amount` when no discount applies. */
+  readonly baseAmount: number;
+  readonly discountAmount: number;
+  readonly discountName: string | null;
   readonly currency: string;
   readonly qpayInvoice: {
     readonly invoiceId: string;
@@ -490,6 +495,10 @@ export class PaymentsService {
       transactionNumber: transaction.transactionNumber,
       invoiceNumber: transaction.invoiceNumber,
       amount: transaction.amount,
+      // Invoices created before pricing plans existed carry no breakdown: they had no discount.
+      baseAmount: transaction.baseAmount ?? transaction.amount,
+      discountAmount: transaction.discountAmount ?? 0,
+      discountName: transaction.discountName ?? null,
       currency: transaction.currency,
       qpayInvoice: {
         invoiceId: transaction.qpayInvoiceId ?? '',
