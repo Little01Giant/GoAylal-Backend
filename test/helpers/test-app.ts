@@ -31,6 +31,7 @@ const MANAGED_ENV = [
   'ALLOW_DEV_ADMIN_TOKEN',
   'GOOGLE_CLIENT_ID',
   'RATE_LIMIT_DISABLED',
+  'QPAY_STATUS_CHECK_INTERVAL_S',
 ] as const;
 
 export const ADMIN_EMAIL = 'admin@example.test';
