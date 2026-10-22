@@ -144,6 +144,28 @@ export class DestinationsService implements OnModuleInit {
           'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
         ],
       },
+      {
+        id: 'trip-shanghai',
+        title: 'Шанхай хотын аяллын хөтөлбөр',
+        destination: 'Шанхай хот, Хятад',
+        country: 'Хятад',
+        countryKey: 'china',
+        countryFlag: '🇨🇳',
+        durationText: '3 – 10 өдөр',
+        daysCount: 5,
+        category: 'city',
+        categoryLabel: 'Бэлэн төлөвлөгөө',
+        startingPrice: 2163000,
+        imageUrl: 'https://pub-83fca96d5b9048f795fabbfcdabba275.r2.dev/attractions/sh-att-02/1.webp',
+        rating: 4.8,
+        reviewsCount: 0,
+        highlights: [
+          'Вайтань далан',
+          'Диснейн амралтын газар',
+          'Шанхайн цамхаг',
+          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
+        ],
+      },
     ];
   }
 
