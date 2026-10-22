@@ -279,6 +279,25 @@ describe('Payments: server-side fee, QPay-confirmed settlement, ownership', () =
       const theirs = await ctx.http.get('/api/v1/payments/my').set(bearer(bob.token)).expect(200);
       expect(theirs.body.data).toEqual([]);
     });
+
+    it('lists only payments that were made, not invoices that were opened and left unpaid', async () => {
+      const open = async (grandTotalCost: number): Promise<string> =>
+        (await ctx.http.post(INVOICE).set(bearer(alice.token)).send({ planSnapshot: plan(grandTotalCost) }).expect(201)).body.data
+          .transactionId as string;
+      const pending = await open(111_111);
+      const expired = await open(222_222);
+      await ctx.payments.updateOne({ _id: expired }, { $set: { status: PaymentStatus.EXPIRED } });
+      const failed = await open(333_333);
+      await ctx.payments.updateOne({ _id: failed }, { $set: { status: PaymentStatus.FAILED } });
+
+      const mine = await ctx.http.get('/api/v1/payments/my').set(bearer(alice.token)).expect(200);
+      const ids = mine.body.data.map((p: { id: string }) => p.id);
+      expect(ids).toContain(invoice.transactionId);
+      expect(ids).not.toContain(pending);
+      expect(ids).not.toContain(expired);
+      expect(ids).not.toContain(failed);
+      expect(mine.body.data.every((p: { status: string }) => p.status === 'completed')).toBe(true);
+    });
   });
 
   describe('guest payment is claimed by the account with the same verified email', () => {

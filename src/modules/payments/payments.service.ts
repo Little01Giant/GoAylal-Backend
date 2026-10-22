@@ -376,8 +376,10 @@ export class PaymentsService {
 
   async findUserPayments(user: AuthenticatedUser): Promise<PaymentHistoryItemDto[]> {
     await this.claimGuestPayments(user);
+    // The history lists payments that happened. Invoices that were opened but never paid (pending, or expired
+    // after the payer moved on) are not history, and the profile shows every entry here as paid.
     const docs = await this.paymentModel
-      .find({ userId: new Types.ObjectId(user.sub) })
+      .find({ userId: new Types.ObjectId(user.sub), status: PaymentStatus.COMPLETED })
       .sort({ createdAt: -1 })
       .limit(HISTORY_LIMIT)
       .lean()
