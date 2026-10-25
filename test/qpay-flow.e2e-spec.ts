@@ -120,6 +120,95 @@ describe('QPay flow: per-invoice callback, throttled status poll, invoice cancel
     });
   });
 
+  describe('payment status contract', () => {
+    it('gives the invoice an expiry 15 minutes after it was created, and the status poll reports the same moment', async () => {
+      const res = await ctx.http
+        .post(INVOICE)
+        .send({ email: 'expiry@example.test', planSnapshot: { destinationName: 'EX', grandTotalCost: 5 } })
+        .expect(201);
+      const stored = await ctx.payments.findById(res.body.data.transactionId).lean().exec();
+      const expected = (stored?.createdAt?.getTime() ?? 0) + 15 * 60 * 1000;
+      expect(Date.parse(res.body.data.expiresAt as string)).toBe(expected);
+      const poll = await ctx.http.get(`${STATUS}/${res.body.data.transactionId}`).expect(200);
+      expect(Date.parse(poll.body.data.expiresAt as string)).toBe(expected);
+    });
+
+    it('accepts only the transaction id for status and verify: sequential numbers are not found', async () => {
+      const inv = await newInvoice();
+      const trx = (await ctx.payments.findById(inv.id).lean().exec())?.transactionNumber ?? '';
+      expect(trx).toMatch(/^TRX-/);
+      await ctx.http.get(`${STATUS}/${trx}`).expect(404);
+      await ctx.http.get(`${STATUS}/${inv.invoiceNumber}`).expect(404);
+      await ctx.http.post(`/api/v1/payments/verify/${trx}`).send({}).expect(404);
+      await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+    });
+
+    it('expires an unpaid invoice that ran out of time with a single QPay check, and cancels it at QPay', async () => {
+      const inv = await newInvoice();
+      await age(inv.id, 'createdAt', 16 * 60 * 1000);
+      const before = ctx.qpay.checks;
+
+      const first = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+      expect(first.body.data).toMatchObject({ verified: false, status: 'expired' });
+      for (let i = 0; i < 4; i++) {
+        const again = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+        expect(again.body.data.status).toBe('expired');
+      }
+      expect(ctx.qpay.checks - before).toBe(1);
+      expect(await status(inv.id)).toBe(PaymentStatus.EXPIRED);
+      expect(ctx.qpay.cancelled.has(inv.qpayInvoiceId)).toBe(true);
+    });
+
+    it('settles instead of expiring when the invoice was paid at the last moment', async () => {
+      const inv = await newInvoice();
+      await age(inv.id, 'createdAt', 16 * 60 * 1000);
+      ctx.qpay.paid.add(inv.qpayInvoiceId);
+      const res = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+      expect(res.body.data).toMatchObject({ verified: true, status: 'completed' });
+      expect(await status(inv.id)).toBe(PaymentStatus.COMPLETED);
+      expect(ctx.qpay.cancelled.has(inv.qpayInvoiceId)).toBe(false);
+    });
+
+    it('still settles an invoice paid after the status poll expired it, and reports paidAt', async () => {
+      const inv = await newInvoice();
+      await age(inv.id, 'createdAt', 16 * 60 * 1000);
+      await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+      expect(await status(inv.id)).toBe(PaymentStatus.EXPIRED);
+
+      ctx.qpay.paid.add(inv.qpayInvoiceId);
+      await ctx.http.post(`${CALLBACK}/${inv.invoiceNumber}`).expect(200);
+      const res = await ctx.http.get(`${STATUS}/${inv.id}`).expect(200);
+      expect(res.body.data).toMatchObject({ verified: true, status: 'completed' });
+      expect(Date.parse(res.body.data.paidAt as string)).not.toBeNaN();
+    });
+
+    it('repairs a completed payment whose itinerary was left locked', async () => {
+      const owner = await ctx.makeUser('repair@example.test');
+      const itinerary = await ctx.http
+        .post('/api/v1/itineraries')
+        .set(bearer(owner.token))
+        .send({ destinationKey: 'beijing', title: 'T', totalDays: 1, days: [{ dayNumber: 1, title: 'D', items: [] }] })
+        .expect(201);
+      const itineraryId = itinerary.body.data.id as string;
+      const invoice = await ctx.http
+        .post(INVOICE)
+        .set(bearer(owner.token))
+        .send({ itineraryId, planSnapshot: { destinationName: 'RP', grandTotalCost: 9 } })
+        .expect(201);
+      const id = invoice.body.data.transactionId as string;
+
+      // The process stopped right after the payment was marked completed, before the itinerary was unlocked.
+      await ctx.payments.collection.updateOne(
+        { _id: new Types.ObjectId(id) },
+        { $set: { status: PaymentStatus.COMPLETED, paidAt: new Date() } },
+      );
+      expect((await ctx.itineraries.findById(itineraryId).lean().exec())?.status).not.toBe('unlocked');
+
+      await ctx.http.get(`${STATUS}/${id}`).expect(200);
+      expect((await ctx.itineraries.findById(itineraryId).lean().exec())?.status).toBe('unlocked');
+    });
+  });
+
   describe('cancelling invoices we give up on', () => {
     it('cancels the stale invoice at QPay when a fresh one replaces it', async () => {
       const email = 'stale@example.test';
@@ -167,7 +256,21 @@ describe('QPay flow with the default QPAY_STATUS_CHECK_INTERVAL_S (callback only
   });
   afterAll(async () => ctx.close());
 
-  it('never asks QPay from the status poll, however long the invoice has waited; the callback still settles', async () => {
+  it('never asks QPay while the invoice is within its time, however often the dialog polls', async () => {
+    const res = await ctx.http
+      .post(INVOICE)
+      .send({ email: 'within-time@example.test', planSnapshot: { destinationName: 'WT', grandTotalCost: 1 } })
+      .expect(201);
+    const id = res.body.data.transactionId as string;
+    const before = ctx.qpay.checks;
+    for (let i = 0; i < 6; i++) {
+      const poll = await ctx.http.get(`${STATUS}/${id}`).expect(200);
+      expect(poll.body.data).toMatchObject({ verified: false, status: 'pending' });
+    }
+    expect(ctx.qpay.checks).toBe(before);
+  });
+
+  it('after its time ran out asks QPay once and expires it; the callback still settles a late payment', async () => {
     const res = await ctx.http
       .post(INVOICE)
       .send({ email: 'callback-only@example.test', planSnapshot: { destinationName: 'CB', grandTotalCost: 1 } })
@@ -176,14 +279,14 @@ describe('QPay flow with the default QPAY_STATUS_CHECK_INTERVAL_S (callback only
     const invoiceId = res.body.data.qpayInvoice.invoiceId as string;
     await ctx.payments.collection.updateOne({ _id: new Types.ObjectId(id) }, { $set: { createdAt: new Date(Date.now() - 3_600_000) } });
 
-    ctx.qpay.paid.add(invoiceId);
     const before = ctx.qpay.checks;
     for (let i = 0; i < 4; i++) {
       const poll = await ctx.http.get(`${STATUS}/${id}`).expect(200);
-      expect(poll.body.data).toMatchObject({ verified: false, status: 'pending' });
+      expect(poll.body.data).toMatchObject({ verified: false, status: 'expired' });
     }
-    expect(ctx.qpay.checks).toBe(before);
+    expect(ctx.qpay.checks - before).toBe(1);
 
+    ctx.qpay.paid.add(invoiceId);
     const callback = await ctx.http.post(`${CALLBACK}/${res.body.data.invoiceNumber}`).expect(200);
     expect(callback.body.data.verified).toBe(true);
     const poll = await ctx.http.get(`${STATUS}/${id}`).expect(200);

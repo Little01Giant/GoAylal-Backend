@@ -124,7 +124,8 @@ describe('Payments: server-side fee, QPay-confirmed settlement, ownership', () =
 
     it('verify reports unpaid and does not settle; simulate is ignored outside mock mode', async () => {
       const res = await ctx.http.post(`/api/v1/payments/verify/${invoice.transactionId}`).send({ simulate: true }).expect(200);
-      expect(res.body.data).toEqual({ verified: false, transactionNumber: invoice.transactionNumber, status: 'pending' });
+      expect(res.body.data).toMatchObject({ verified: false, transactionNumber: invoice.transactionNumber, status: 'pending' });
+      expect(res.body.data.paidAt).toBeUndefined();
       expect((await ctx.payments.findById(invoice.transactionId))?.status).toBe(PaymentStatus.PENDING);
     });
 
@@ -147,7 +148,8 @@ describe('Payments: server-side fee, QPay-confirmed settlement, ownership', () =
     it('settles once QPay reports the invoice as paid', async () => {
       payFor(invoice.qpayInvoice.invoiceId);
       const res = await ctx.http.post(`/api/v1/payments/verify/${invoice.transactionId}`).send({}).expect(200);
-      expect(res.body.data).toEqual({ verified: true, transactionNumber: invoice.transactionNumber, status: 'completed' });
+      expect(res.body.data).toMatchObject({ verified: true, transactionNumber: invoice.transactionNumber, status: 'completed' });
+      expect(Date.parse(res.body.data.paidAt)).not.toBeNaN();
       const stored = await ctx.payments.findById(invoice.transactionId);
       expect(stored?.status).toBe(PaymentStatus.COMPLETED);
       expect(stored?.paidAt).toBeInstanceOf(Date);
