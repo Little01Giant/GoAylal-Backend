@@ -21,8 +21,7 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "upload:cloudflare": "node scripts/upload-to-cloudflare.mjs",
-    "migrate:payment-indexes": "node dist/scripts/migrate-payment-indexes.js",
-    "seed:catalog": "node dist/scripts/seed-catalog.js"
+    "migrate:payment-indexes": "node dist/scripts/migrate-payment-indexes.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1153.0",

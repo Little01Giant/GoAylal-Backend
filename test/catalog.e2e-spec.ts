@@ -1,22 +1,19 @@
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { ALL_DESTINATIONS } from '../src/modules/destinations/all-destinations.data.js';
 import { DestinationsService } from '../src/modules/destinations/destinations.service.js';
 import { Attraction, type AttractionDocument } from '../src/modules/destinations/schemas/attraction.schema.js';
 import { Hotel, type HotelDocument } from '../src/modules/destinations/schemas/hotel.schema.js';
 import { Transport, type TransportDocument } from '../src/modules/destinations/schemas/transport.schema.js';
+import { makeCity } from './helpers/catalog-fixture.js';
 import { createTestApp, type TestContext } from './helpers/test-app.js';
 
-describe('Catalog: idempotent seeding and public contract', () => {
+describe('Catalog: database-only cities, idempotent upsert and public contract', () => {
   let ctx: TestContext;
   let service: DestinationsService;
   let attractions: Model<AttractionDocument>;
   let hotels: Model<HotelDocument>;
   let transports: Model<TransportDocument>;
-  const city = ALL_DESTINATIONS[0]!;
-  const totalAttractions = ALL_DESTINATIONS.reduce((n, c) => n + c.attractions.length, 0);
-  const totalHotels = ALL_DESTINATIONS.reduce((n, c) => n + c.hotels.length, 0);
-  const totalTransports = ALL_DESTINATIONS.reduce((n, c) => n + c.transports.length, 0);
+  const city = makeCity('beijing', 'Бээжин', 12);
 
   beforeAll(async () => {
     ctx = await createTestApp();
@@ -27,22 +24,25 @@ describe('Catalog: idempotent seeding and public contract', () => {
   });
   afterAll(async () => ctx.close());
 
-  it('does not seed on boot when SEED_ON_BOOT=false', async () => {
+  it('serves nothing from code: an empty database has no cities, trips or fallback', async () => {
     expect(await attractions.countDocuments()).toBe(0);
+    expect((await ctx.http.get('/api/v1/destinations').expect(200)).body.data).toEqual([]);
+    expect((await ctx.http.get('/api/v1/destinations/suggested-trips').expect(200)).body.data).toEqual([]);
+    await ctx.http.get('/api/v1/destinations/beijing').expect(404);
   });
 
-  it('seeds everything once, then re-seeding changes nothing: same rows, same _ids', async () => {
-    await service.seedCatalog();
+  it('upserts a city once, then re-upserting changes nothing: same rows, same _ids', async () => {
+    await service.upsertCity(city);
     const idsAfterFirst = (await attractions.find().sort({ seedId: 1 }).lean()).map((a) => a._id.toString());
-    expect(idsAfterFirst).toHaveLength(totalAttractions);
-    expect(await hotels.countDocuments()).toBe(totalHotels);
-    expect(await transports.countDocuments()).toBe(totalTransports);
+    expect(idsAfterFirst).toHaveLength(city.attractions.length);
+    expect(await hotels.countDocuments()).toBe(city.hotels.length);
+    expect(await transports.countDocuments()).toBe(city.transports.length);
 
-    await service.seedCatalog();
-    await service.seedCatalog();
+    await service.upsertCity(city);
+    await service.upsertCity(city);
     const idsAfterThird = (await attractions.find().sort({ seedId: 1 }).lean()).map((a) => a._id.toString());
     expect(idsAfterThird).toEqual(idsAfterFirst);
-    expect(await hotels.countDocuments()).toBe(totalHotels);
+    expect(await hotels.countDocuments()).toBe(city.hotels.length);
   });
 
   it('adopts rows written by the old delete-and-reinsert seed instead of duplicating them', async () => {
@@ -60,8 +60,8 @@ describe('Catalog: idempotent seeding and public contract', () => {
       estimatedCost: 1,
     });
 
-    await service.seedCatalog();
-    expect(await attractions.countDocuments()).toBe(totalAttractions);
+    await service.upsertCity(city);
+    expect(await attractions.countDocuments()).toBe(city.attractions.length);
     const adopted = await attractions.findById(inserted.insertedId).lean();
     expect(adopted?.seedId).toBe(legacy.id);
     expect(adopted?.estimatedCost).toBe(legacy.estimatedCost);
@@ -77,14 +77,12 @@ describe('Catalog: idempotent seeding and public contract', () => {
   });
 
   it('stores the Trip.com price source in the database but never returns it from the public API', async () => {
-    const sourced = ALL_DESTINATIONS.find((c) => c.attractions.some((a) => a.sourceUrl !== undefined));
-    if (!sourced) return;
-    const seeded = sourced.attractions.find((a) => a.sourceUrl !== undefined)!;
-    const row = await attractions.findOne({ destinationKey: sourced.key, seedId: seeded.id }).lean();
+    const seeded = city.attractions[0]!;
+    const row = await attractions.findOne({ destinationKey: city.key, seedId: seeded.id }).lean();
     expect(row?.sourceUrl).toBe(seeded.sourceUrl);
     expect(row?.priceCheckedAt).toBe(seeded.priceCheckedAt);
 
-    const res = await ctx.http.get(`/api/v1/destinations/${sourced.key}`).expect(200);
+    const res = await ctx.http.get(`/api/v1/destinations/${city.key}`).expect(200);
     const everything = JSON.stringify(res.body);
     expect(everything).not.toContain('sourceUrl');
     expect(everything).not.toContain('priceCheckedAt');

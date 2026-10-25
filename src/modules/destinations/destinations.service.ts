@@ -1,13 +1,12 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ConfigService } from '@nestjs/config';
 import { Document, Model, Types } from 'mongoose';
 import { Destination, DestinationDocument } from './schemas/destination.schema.js';
 import { Attraction, AttractionDocument } from './schemas/attraction.schema.js';
 import { Hotel, HotelDocument } from './schemas/hotel.schema.js';
 import { Transport, TransportDocument, TransportType } from './schemas/transport.schema.js';
 import { SuggestedTrip, SuggestedTripDocument } from './schemas/suggested-trip.schema.js';
-import { ALL_DESTINATIONS, SeedDestinationCity } from './all-destinations.data.js';
+import type { SeedDestinationCity } from './destination-city.types.js';
 
 type LeanAttraction = Attraction & { _id: Types.ObjectId };
 type LeanHotel = Hotel & { _id: Types.ObjectId };
@@ -51,9 +50,7 @@ export interface SuggestedTripItem {
 }
 
 @Injectable()
-export class DestinationsService implements OnModuleInit {
-  private readonly logger = new Logger(DestinationsService.name);
-
+export class DestinationsService {
   constructor(
     @InjectModel(Destination.name)
     private readonly destinationModel: Model<DestinationDocument>,
@@ -65,26 +62,14 @@ export class DestinationsService implements OnModuleInit {
     private readonly transportModel: Model<TransportDocument>,
     @InjectModel(SuggestedTrip.name)
     private readonly tripModel: Model<SuggestedTripDocument>,
-    private readonly configService: ConfigService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    if (this.configService.get<boolean>('seed.onBoot') === true) {
-      await this.seedCatalog();
-    }
-  }
-
-  async findAll(query?: { countryKey?: string; popular?: boolean }): Promise<Destination[] | SeedDestinationCity[]> {
+  async findAll(query?: { countryKey?: string; popular?: boolean }): Promise<Destination[]> {
     const filter: Record<string, string | boolean> = {};
     if (query?.countryKey) filter.countryKey = query.countryKey;
     if (query?.popular !== undefined) filter.popular = query.popular;
 
-    const docs = await this.destinationModel.find(filter).lean<Destination[]>().exec();
-    if (docs.length === 0) {
-      // Graceful fallback from the in-memory seed catalog
-      return ALL_DESTINATIONS.filter((d) => !query?.countryKey || d.countryKey === query.countryKey).map(publicCity);
-    }
-    return docs;
+    return this.destinationModel.find(filter).lean<Destination[]>().exec();
   }
 
   async findByKey(key: string): Promise<SeedDestinationCity> {
@@ -110,122 +95,34 @@ export class DestinationsService implements OnModuleInit {
       });
     }
 
-    // Fallback to static seed data if not found in db
-    const seed = ALL_DESTINATIONS.find((c) => c.key === key);
-    if (seed) {
-      return publicCity(seed);
-    }
     throw new NotFoundException(`'${key}' аяллын чиглэл олдсонгүй.`);
   }
 
   async getSuggestedTrips(): Promise<SuggestedTripItem[]> {
     const docs = await this.tripModel.find({ isActive: true }).lean().exec();
-    if (docs.length > 0) {
-      return docs.map((d) => ({
-        id: d.slug,
-        title: d.title,
-        destination: d.destination,
-        country: d.country,
-        countryKey: d.countryKey,
-        countryFlag: d.countryFlag,
-        durationText: d.durationText,
-        daysCount: d.daysCount,
-        category: d.category,
-        categoryLabel: d.categoryLabel,
-        startingPrice: d.startingPrice,
-        imageUrl: d.imageUrl,
-        rating: d.rating,
-        reviewsCount: d.reviewsCount,
-        highlights: d.highlights,
-      }));
-    }
-
-    return [
-      {
-        id: 'trip-beijing',
-        title: 'Бээжин хотын аяллын хөтөлбөр',
-        destination: 'Бээжин хот, Хятад',
-        country: 'Хятад',
-        countryKey: 'china',
-        countryFlag: '🇨🇳',
-        durationText: '3 – 10 өдөр',
-        daysCount: 5,
-        category: 'historical',
-        categoryLabel: 'Бэлэн төлөвлөгөө',
-        startingPrice: 849460,
-        imageUrl: '/images/attractions/bj-att-01/1.jpg',
-        rating: 4.9,
-        reviewsCount: 184,
-        highlights: [
-          'Цагаан хэрэм (Мутяньюй кабель зам & чарга)',
-          'Хориотой хот (Хааны ордны музей)',
-          'Юниверсал Студио Бээжин бүрэн өдөр',
-          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
-        ],
-      },
-      {
-        id: 'trip-shanghai',
-        title: 'Шанхай хотын аяллын хөтөлбөр',
-        destination: 'Шанхай хот, Хятад',
-        country: 'Хятад',
-        countryKey: 'china',
-        countryFlag: '🇨🇳',
-        durationText: '3 – 10 өдөр',
-        daysCount: 5,
-        category: 'city',
-        categoryLabel: 'Бэлэн төлөвлөгөө',
-        startingPrice: 2163000,
-        imageUrl: 'https://pub-83fca96d5b9048f795fabbfcdabba275.r2.dev/attractions/sh-att-02/1.webp',
-        rating: 4.8,
-        reviewsCount: 0,
-        highlights: [
-          'Вайтань далан',
-          'Диснейн амралтын газар',
-          'Шанхайн цамхаг',
-          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
-        ],
-      },
-      {
-        id: 'trip-phuket',
-        title: 'Пукет хотын аяллын хөтөлбөр',
-        destination: 'Пукет хот, Тайланд',
-        country: 'Тайланд',
-        countryKey: 'thailand',
-        countryFlag: '🇹🇭',
-        durationText: '3 – 10 өдөр',
-        daysCount: 5,
-        category: 'nature',
-        categoryLabel: 'Бэлэн төлөвлөгөө',
-        startingPrice: 2619000,
-        imageUrl: 'https://pub-83fca96d5b9048f795fabbfcdabba275.r2.dev/attractions/ph-att-08/1.webp',
-        rating: 4.8,
-        reviewsCount: 0,
-        highlights: [
-          'Пхи Пхи арлууд',
-          'Пукетийн Их Бурхан',
-          'Ката далайн эрэг',
-          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
-        ],
-      },
-    ];
-  }
-
-  /**
-   * Idempotent, non-destructive catalog sync: every seed row is upserted by (destinationKey, seedId),
-   * so database ids stay stable across runs and saved itineraries keep pointing at real attractions.
-   * Rows created by the old delete-and-reinsert seed (no seedId) are adopted by name, never duplicated.
-   */
-  async seedCatalog(): Promise<void> {
-    for (const city of ALL_DESTINATIONS) {
-      await this.upsertCity(city);
-    }
-    this.logger.log(`Catalog synced: ${ALL_DESTINATIONS.length} destinations`);
+    return docs.map((d) => ({
+      id: d.slug,
+      title: d.title,
+      destination: d.destination,
+      country: d.country,
+      countryKey: d.countryKey,
+      countryFlag: d.countryFlag,
+      durationText: d.durationText,
+      daysCount: d.daysCount,
+      category: d.category,
+      categoryLabel: d.categoryLabel,
+      startingPrice: d.startingPrice,
+      imageUrl: d.imageUrl,
+      rating: d.rating,
+      reviewsCount: d.reviewsCount,
+      highlights: d.highlights,
+    }));
   }
 
   /**
    * Adds or updates one city with its attractions, hotels and transports, keyed by (destinationKey, item id).
    * Items missing from `city` are left untouched, so saved itineraries keep pointing at real rows.
-   * Shared by the seed script and the admin API, so a city can live in the database without a code change.
+   * The admin API is the only way in, so a city lives in the database without a code change.
    */
   async upsertCity(city: SeedDestinationCity, options: { popular?: boolean } = {}): Promise<void> {
     const firstAttraction = [...city.attractions].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))[0];

@@ -1,3 +1,5 @@
+import { DestinationsService } from '../src/modules/destinations/destinations.service.js';
+import { makeCity } from './helpers/catalog-fixture.js';
 import { bearer, createTestApp, type TestContext, type TestUser } from './helpers/test-app.js';
 
 const CHAT = '/api/v1/ai/chat';
@@ -9,6 +11,7 @@ describe('AI planner: ownership, input limits and request parsing', () => {
 
   beforeAll(async () => {
     ctx = await createTestApp();
+    await ctx.app.get(DestinationsService).upsertCity(makeCity('beijing', 'Бээжин'));
     alice = await ctx.makeUser('alice@example.test');
     bob = await ctx.makeUser('bob@example.test');
   });
