@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { DestinationsService, type SuggestedTripItem } from './destinations.service.js';
 import type { Destination } from './schemas/destination.schema.js';
-import type { SeedDestinationCity } from './all-destinations.data.js';
+import type { SeedDestinationCity } from './destination-city.types.js';
 
 @ApiTags('Destinations')
 @Controller('destinations')

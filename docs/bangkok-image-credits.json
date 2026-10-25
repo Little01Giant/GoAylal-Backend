@@ -1,0 +1,417 @@
+{
+  "note": "Бангкок хотын зургийн эх сурвалж. Wikimedia Commons зургууд (CC BY / CC BY-SA / CC0) — CC BY, CC BY-SA зургуудад зохиогчийн нэрийг сайт дээр заавал харуулна. bk-att-13 (Акара Скай Ханоман), bk-att-15 (Jurassic World), bk-att-17 (Flow House) нь ерөнхий (тухайн газрын биш) зураг. bk-att-14 нь Dream World-ийн 1 зурагтай.",
+  "images": {
+    "bk-att-13": [
+      {
+        "file": "1.webp",
+        "title": "Bangkok Skyline from Movenpick Hotel, Asok, Bangkok at night.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Bangkok_Skyline_from_Movenpick_Hotel,_Asok,_Bangkok_at_night.jpg",
+        "kb": 91
+      },
+      {
+        "file": "2.webp",
+        "title": "Bangkok - City skyline at sunset.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Azreey",
+        "source": "https://commons.wikimedia.org/wiki/File:Bangkok_-_City_skyline_at_sunset.JPG",
+        "kb": 54
+      },
+      {
+        "file": "3.webp",
+        "title": "Bangkok, Thailand, Benjakitti Park, 2024.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "OPK-Photography",
+        "source": "https://commons.wikimedia.org/wiki/File:Bangkok,_Thailand,_Benjakitti_Park,_2024.jpg",
+        "kb": 128
+      }
+    ],
+    "bk-att-14": [
+      {
+        "file": "1.webp",
+        "title": "HurricaneDreamWorld.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Poonpun2016",
+        "source": "https://commons.wikimedia.org/wiki/File:HurricaneDreamWorld.jpg",
+        "kb": 273
+      }
+    ],
+    "bk-att-15": [
+      {
+        "file": "1.webp",
+        "title": "Animatronic Tyrannosaurus Rex (36444760946).jpg",
+        "license": "CC0",
+        "author": "Gary Todd from Xinzheng, China",
+        "source": "https://commons.wikimedia.org/wiki/File:Animatronic_Tyrannosaurus_Rex_(36444760946).jpg",
+        "kb": 139
+      },
+      {
+        "file": "2.webp",
+        "title": "Animatronic Tyrannosaurus Rex Head (36323210402).jpg",
+        "license": "CC0",
+        "author": "Gary Todd from Xinzheng, China",
+        "source": "https://commons.wikimedia.org/wiki/File:Animatronic_Tyrannosaurus_Rex_Head_(36323210402).jpg",
+        "kb": 149
+      },
+      {
+        "file": "3.webp",
+        "title": "NMoS Animatronic T-Rex 02.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Brian McNeil",
+        "source": "https://commons.wikimedia.org/wiki/File:NMoS_Animatronic_T-Rex_02.jpg",
+        "kb": 70
+      }
+    ],
+    "bk-att-16": [
+      {
+        "file": "1.webp",
+        "title": "Apple Store at Iconsiam, Bangkok 2.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Apple_Store_at_Iconsiam,_Bangkok_2.jpg",
+        "kb": 132
+      },
+      {
+        "file": "2.webp",
+        "title": "Apple Store at Iconsiam, Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Apple_Store_at_Iconsiam,_Bangkok.jpg",
+        "kb": 310
+      },
+      {
+        "file": "3.webp",
+        "title": "Approaching Iconsiam from Chao Phraya River, Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Approaching_Iconsiam_from_Chao_Phraya_River,_Bangkok.jpg",
+        "kb": 162
+      }
+    ],
+    "bk-att-17": [
+      {
+        "file": "1.webp",
+        "title": "Flowrider Voyager of the Seas 2023.jpg",
+        "license": "CC BY 4.0",
+        "author": "Larry D. Moore",
+        "source": "https://commons.wikimedia.org/wiki/File:Flowrider_Voyager_of_the_Seas_2023.jpg",
+        "kb": 210
+      },
+      {
+        "file": "2.webp",
+        "title": "Surf s Up Zone 1.jpg",
+        "license": "CC0",
+        "author": "Tozpithan",
+        "source": "https://commons.wikimedia.org/wiki/File:Surf_s_Up_Zone_1.jpg",
+        "kb": 210
+      }
+    ],
+    "bk-att-18": [
+      {
+        "file": "1.webp",
+        "title": "Benchasiri Park, Bangkok Panorama.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Benchasiri_Park,_Bangkok_Panorama.jpg",
+        "kb": 198
+      },
+      {
+        "file": "2.webp",
+        "title": "Benchasiri Park, Bangkok Panorama 2.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Benchasiri_Park,_Bangkok_Panorama_2.jpg",
+        "kb": 134
+      },
+      {
+        "file": "3.webp",
+        "title": "Palm Trees at Benchasiri Park, Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Palm_Trees_at_Benchasiri_Park,_Bangkok.jpg",
+        "kb": 113
+      }
+    ],
+    "bk-att-01": [
+      {
+        "file": "1.webp",
+        "title": "A roof of a building at the Grand Palace, Bangkok, sunrise, 2017.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Bjørn Erik Pedersen",
+        "source": "https://commons.wikimedia.org/wiki/File:A_roof_of_a_building_at_the_Grand_Palace,_Bangkok,_sunrise,_2017.jpg",
+        "kb": 73
+      },
+      {
+        "file": "2.webp",
+        "title": "วัดพระศรีรัตนศาสดาราม วัดพระแก้ว กรุงเทพมหานคร - Wat Phra Kaew, Temple of Emerald Buddha, Bangkok, Thailand.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Basile Morin",
+        "source": "https://commons.wikimedia.org/wiki/File:%E0%B8%A7%E0%B8%B1%E0%B8%94%E0%B8%9E%E0%B8%A3%E0%B8%B0%E0%B8%A8%E0%B8%A3%E0%B8%B5%E0%B8%A3%E0%B8%B1%E0%B8%95%E0%B8%99%E0%B8%A8%E0%B8%B2%E0%B8%AA%E0%B8%94%E0%B8%B2%E0%B8%A3%E0%B8%B2%E0%B8%A1_%E0%B8%A7%E0%B8%B1%E0%B8%94%E0%B8%9E%E0%B8%A3%E0%B8%B0%E0%B9%81%E0%B8%81%E0%B9%89%E0%B8%A7_%E0%B8%81%E0%B8%A3%E0%B8%B8%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%9E%E0%B8%A1%E0%B8%AB%E0%B8%B2%E0%B8%99%E0%B8%84%E0%B8%A3_-_Wat_Phra_Kaew,_Temple_of_Emerald_Buddha,_Bangkok,_Thailand.jpg",
+        "kb": 206
+      },
+      {
+        "file": "3.webp",
+        "title": "Grand Palace, Bangkok 4.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Slyronit",
+        "source": "https://commons.wikimedia.org/wiki/File:Grand_Palace,_Bangkok_4.jpg",
+        "kb": 157
+      }
+    ],
+    "bk-att-02": [
+      {
+        "file": "1.webp",
+        "title": "Templo Wat Arun, Bangkok, Tailandia, 2013-08-22, DD 30.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Templo_Wat_Arun,_Bangkok,_Tailandia,_2013-08-22,_DD_30.jpg",
+        "kb": 270
+      },
+      {
+        "file": "2.webp",
+        "title": "Templo Wat Arun, Bangkok, Tailandia, 2013-08-22, DD 37.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Templo_Wat_Arun,_Bangkok,_Tailandia,_2013-08-22,_DD_37.jpg",
+        "kb": 145
+      },
+      {
+        "file": "3.webp",
+        "title": "The sculptures of two mythical giant demons, Thotsakan and Sahatsadecha, guarding the eastern gate of the main chapel of Wat Arun, Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "BerryJ",
+        "source": "https://commons.wikimedia.org/wiki/File:The_sculptures_of_two_mythical_giant_demons,_Thotsakan_and_Sahatsadecha,_guarding_the_eastern_gate_of_the_main_chapel_of_Wat_Arun,_Bangkok.jpg",
+        "kb": 308
+      }
+    ],
+    "bk-att-03": [
+      {
+        "file": "1.webp",
+        "title": "Chao Phraya River Thai.jpg",
+        "license": "CC0",
+        "author": "pxhere",
+        "source": "https://commons.wikimedia.org/wiki/File:Chao_Phraya_River_Thai.jpg",
+        "kb": 245
+      },
+      {
+        "file": "2.webp",
+        "title": "On the Chao Phraya. (11426411713).jpg",
+        "license": "CC0",
+        "author": "Bernard Spragg. NZ from Christchurch, New Zealand",
+        "source": "https://commons.wikimedia.org/wiki/File:On_the_Chao_Phraya._(11426411713).jpg",
+        "kb": 264
+      },
+      {
+        "file": "3.webp",
+        "title": "Cruising down The Bangkok River (8279480292).jpg",
+        "license": "CC BY 2.0",
+        "author": "Ian Gratton from Sutton-n-Craven, North Yorkshire, England",
+        "source": "https://commons.wikimedia.org/wiki/File:Cruising_down_The_Bangkok_River_(8279480292).jpg",
+        "kb": 149
+      }
+    ],
+    "bk-att-04": [
+      {
+        "file": "1.webp",
+        "title": "King Power Mahanakhon Rooftop View of Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Shivashanky",
+        "source": "https://commons.wikimedia.org/wiki/File:King_Power_Mahanakhon_Rooftop_View_of_Bangkok.jpg",
+        "kb": 229
+      },
+      {
+        "file": "2.webp",
+        "title": "Mahanakhon Building ตึกมหานคร Photographed by Trisorn Triboon.JPG",
+        "license": "CC BY 3.0",
+        "author": "Tris_T7",
+        "source": "https://commons.wikimedia.org/wiki/File:Mahanakhon_Building_%E0%B8%95%E0%B8%B6%E0%B8%81%E0%B8%A1%E0%B8%AB%E0%B8%B2%E0%B8%99%E0%B8%84%E0%B8%A3_Photographed_by_Trisorn_Triboon.JPG",
+        "kb": 125
+      },
+      {
+        "file": "3.webp",
+        "title": "Skyscrapers of Bangkok during a sunset from Mahanakhon terrace.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "iMahesh",
+        "source": "https://commons.wikimedia.org/wiki/File:Skyscrapers_of_Bangkok_during_a_sunset_from_Mahanakhon_terrace.jpg",
+        "kb": 207
+      }
+    ],
+    "bk-att-05": [
+      {
+        "file": "1.webp",
+        "title": "Safari World.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Lerdsuwa",
+        "source": "https://commons.wikimedia.org/wiki/File:Safari_World.jpg",
+        "kb": 194
+      },
+      {
+        "file": "2.webp",
+        "title": "1050 Tierpark Bangkok Safari World Bangkok Safari World.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Joachim Lutz",
+        "source": "https://commons.wikimedia.org/wiki/File:1050_Tierpark_Bangkok_Safari_World_Bangkok_Safari_World.jpg",
+        "kb": 321
+      },
+      {
+        "file": "3.webp",
+        "title": "Safari World, Bangkok, Thailand (Unsplash).jpg",
+        "license": "CC0",
+        "author": "Stephanie Ecate steffny0206",
+        "source": "https://commons.wikimedia.org/wiki/File:Safari_World,_Bangkok,_Thailand_(Unsplash).jpg",
+        "kb": 44
+      }
+    ],
+    "bk-att-06": [
+      {
+        "file": "1.webp",
+        "title": "Damnoen Saduak - Marché flottant.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "PA",
+        "source": "https://commons.wikimedia.org/wiki/File:Damnoen_Saduak_-_March%C3%A9_flottant.jpg",
+        "kb": 233
+      },
+      {
+        "file": "2.webp",
+        "title": "Pływający targ Damnoen Saduak 2.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "AramilFeraxa",
+        "source": "https://commons.wikimedia.org/wiki/File:P%C5%82ywaj%C4%85cy_targ_Damnoen_Saduak_2.jpg",
+        "kb": 204
+      },
+      {
+        "file": "3.webp",
+        "title": "Ratchaburi Damnoen Saduak Floating Market 2.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Mr.Niwat Tantayanusorn, Ph.D.",
+        "source": "https://commons.wikimedia.org/wiki/File:Ratchaburi_Damnoen_Saduak_Floating_Market_2.jpg",
+        "kb": 251
+      }
+    ],
+    "bk-att-07": [
+      {
+        "file": "1.webp",
+        "title": "Parque Lumphini, Bangkok, Tailandia, 2013-08-22, DD 01.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Parque_Lumphini,_Bangkok,_Tailandia,_2013-08-22,_DD_01.jpg",
+        "kb": 159
+      },
+      {
+        "file": "2.webp",
+        "title": "Parque Lumphini, Bangkok, Tailandia, 2013-08-22, DD 04.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Parque_Lumphini,_Bangkok,_Tailandia,_2013-08-22,_DD_04.jpg",
+        "kb": 195
+      },
+      {
+        "file": "3.webp",
+        "title": "Parque Lumphini, Bangkok, Tailandia, 2013-08-22, DD 02.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Parque_Lumphini,_Bangkok,_Tailandia,_2013-08-22,_DD_02.jpg",
+        "kb": 121
+      }
+    ],
+    "bk-att-08": [
+      {
+        "file": "1.webp",
+        "title": "Spider-Man - Madame Tussauds Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Vishwas r",
+        "source": "https://commons.wikimedia.org/wiki/File:Spider-Man_-_Madame_Tussauds_Bangkok.jpg",
+        "kb": 159
+      },
+      {
+        "file": "2.webp",
+        "title": "Madame Tussauds Bangkok (164).jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "กสิณธร ราชโอรส",
+        "source": "https://commons.wikimedia.org/wiki/File:Madame_Tussauds_Bangkok_(164).jpg",
+        "kb": 156
+      }
+    ],
+    "bk-att-09": [
+      {
+        "file": "1.webp",
+        "title": "Muay Thai match at Rajadamnern Stadium 2007-05-20 15.JPG",
+        "license": "CC BY 3.0",
+        "author": "BrokenSphere",
+        "source": "https://commons.wikimedia.org/wiki/File:Muay_Thai_match_at_Rajadamnern_Stadium_2007-05-20_15.JPG",
+        "kb": 174
+      },
+      {
+        "file": "2.webp",
+        "title": "Muay Thai match at Rajadamnern Stadium 2007-05-20 4.JPG",
+        "license": "CC BY 3.0",
+        "author": "BrokenSphere",
+        "source": "https://commons.wikimedia.org/wiki/File:Muay_Thai_match_at_Rajadamnern_Stadium_2007-05-20_4.JPG",
+        "kb": 142
+      }
+    ],
+    "bk-att-10": [
+      {
+        "file": "1.webp",
+        "title": "SEA LIFE Bangkok Ocean World in 2018 (142).jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "กสิณธร ราชโอรส",
+        "source": "https://commons.wikimedia.org/wiki/File:SEA_LIFE_Bangkok_Ocean_World_in_2018_(142).jpg",
+        "kb": 74
+      },
+      {
+        "file": "2.webp",
+        "title": "SEA LIFE Bangkok Ocean World in 2018 (18).jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "กสิณธร ราชโอรส",
+        "source": "https://commons.wikimedia.org/wiki/File:SEA_LIFE_Bangkok_Ocean_World_in_2018_(18).jpg",
+        "kb": 189
+      }
+    ],
+    "bk-att-11": [
+      {
+        "file": "1.webp",
+        "title": "Calypso Cabaret, Bangkok.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Archeologo",
+        "source": "https://commons.wikimedia.org/wiki/File:Calypso_Cabaret,_Bangkok.jpg",
+        "kb": 79
+      },
+      {
+        "file": "2.webp",
+        "title": "Bangkok - Calypso Cabaret show.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Azreey",
+        "source": "https://commons.wikimedia.org/wiki/File:Bangkok_-_Calypso_Cabaret_show.JPG",
+        "kb": 110
+      }
+    ],
+    "bk-att-12": [
+      {
+        "file": "1.webp",
+        "title": "Erawan Museum - Samut Prakan, Thailand (4989773757).jpg",
+        "license": "CC BY 2.0",
+        "author": "Mike Behnken",
+        "source": "https://commons.wikimedia.org/wiki/File:Erawan_Museum_-_Samut_Prakan,_Thailand_(4989773757).jpg",
+        "kb": 361
+      },
+      {
+        "file": "2.webp",
+        "title": "Erawan Museum display by Don Ramey Logan.jpg",
+        "license": "CC BY 4.0",
+        "author": "Don Ramey Logan",
+        "source": "https://commons.wikimedia.org/wiki/File:Erawan_Museum_display_by_Don_Ramey_Logan.jpg",
+        "kb": 371
+      },
+      {
+        "file": "3.webp",
+        "title": "Erawan Museum by Don Ramey Logan.jpg",
+        "license": "CC BY 4.0",
+        "author": "Don Ramey Logan",
+        "source": "https://commons.wikimedia.org/wiki/File:Erawan_Museum_by_Don_Ramey_Logan.jpg",
+        "kb": 130
+      }
+    ]
+  }
+}

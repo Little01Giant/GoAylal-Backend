@@ -66,9 +66,6 @@ export default () => {
         process.env.GUEST_CHECKOUT_ENABLED === undefined ? true : isTruthy(process.env.GUEST_CHECKOUT_ENABLED),
       emailEnabled: isTruthy(process.env.PAYMENT_EMAIL_ENABLED),
     },
-    seed: {
-      onBoot: process.env.SEED_ON_BOOT === undefined ? !isProduction : isTruthy(process.env.SEED_ON_BOOT),
-    },
     deepseek: {
       apiKey: process.env.DEEPSEEK_API_KEY ?? '',
       baseUrl: process.env.DEEPSEEK_BASE_URL ?? 'https://api-cdn.thehive.ai/api/v3',

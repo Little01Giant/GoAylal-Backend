@@ -66,6 +66,14 @@ export class Attraction {
 
   @Prop({ type: [String], default: [] })
   bestSeason: string[];
+
+  /** Trip.com page the price came from (internal, for price refreshes). */
+  @Prop({ required: false })
+  sourceUrl?: string;
+
+  /** YYYY-MM-DD the price was last checked. */
+  @Prop({ required: false })
+  priceCheckedAt?: string;
 }
 
 export const AttractionSchema = SchemaFactory.createForClass(Attraction);

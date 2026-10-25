@@ -43,7 +43,7 @@ Base URL `/api/v1`. This file is the contract the backend is built and tested ag
 | `GET /destinations/suggested-trips` | active curated trips (`id` = slug). Registered before `:key`. |
 | `GET /destinations/:key` | `{ key, name, country, countryKey, flag, tag, description, attractions[], hotels[], transports[] }`; each item has a stable `id`. All rows are returned (no de-duplication). 404 `NOT_FOUND` for an unknown key. |
 
-Catalog rules: prices are integer MNT taken directly from Trip.com (AGENTS.md). Attraction `estimatedCost` ≥ 0 per adult (`0` = free). Exactly three hotel tiers `starRating` 2, 3, 5. Transport `type ∈ flight | overland | combined`, `pricePerPerson` > 0. Seeding is an idempotent upsert by `(destinationKey, seedId)`; ids are stable across runs. Run it with `npm run seed:catalog` or `SEED_ON_BOOT=true` (default on outside production, off in production).
+Catalog rules: prices are integer MNT taken directly from Trip.com (AGENTS.md). Attraction `estimatedCost` ≥ 0 per adult (`0` = free). Exactly three hotel tiers `starRating` 2, 3, 5. Transport `type ∈ flight | overland | combined`, `pricePerPerson` > 0. Cities live only in the database: add or edit one with `PUT /admin/destinations/:key` (idempotent upsert by `(destinationKey, seedId)`; ids are stable). There is no seed file, boot seeding or code fallback.
 
 ### Itineraries — permanent saving requires login
 Guests plan and keep drafts **in the frontend only**. They never reach the API.
@@ -110,11 +110,11 @@ All routes return 401 without a token and 403 for a non-admin.
 | `PAYMENT_EMAIL_ENABLED` | default `false` (a code comment records that the product owner did not want the PDF/email sent yet; the docs say otherwise). |
 | `DEEPSEEK_API_KEY/BASE_URL/MODEL` | the AI provider is DeepSeek via The Hive. Optional: without a key the built-in cost plan is returned. `GEMINI_API_KEY` from the docs is **not** used. |
 | `CORS_ORIGIN` | comma list; localhost is added only outside production. |
-| `TRUST_PROXY`, `SEED_ON_BOOT`, `SMTP_*` | see `.env.example`. |
+| `TRUST_PROXY`, `SMTP_*` | see `.env.example`. |
 
 ## Deployment implications
 1. Set a real `JWT_SECRET` before deploying; a deployment still using a short, repetitive or placeholder secret will refuse to start. **Rotating it logs everyone out.**
 2. In production Mongoose no longer builds indexes at boot. Before (or right after) the first deploy run `npm run build && npm run migrate:payment-indexes` (dry run), review the report, then re-run with `--apply --allow-production --confirm-backup`. It never deletes: surplus duplicate pending invoices are moved to `expired`.
-3. The catalog is no longer wiped and rebuilt on every boot. Existing rows are adopted by name on the first `npm run seed:catalog`.
+3. The catalog is read only from the database: there is no seed file, boot seeding or in-code fallback. A database without cities serves an empty list.
 4. `userId` on payments is optional now. Legacy rows created with a random placeholder user id remain as they are (they never match a real user).
 5. The pending-invoice dedupe, rate limits and token checks assume `TRUST_PROXY=1` behind Nginx.

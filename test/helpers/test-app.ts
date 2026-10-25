@@ -26,7 +26,6 @@ const MANAGED_ENV = [
   'GUEST_CHECKOUT_ENABLED',
   'PAYMENT_EMAIL_ENABLED',
   'UNLOCK_FEE_MNT',
-  'SEED_ON_BOOT',
   'QPAY_MOCK',
   'ALLOW_DEV_ADMIN_TOKEN',
   'GOOGLE_CLIENT_ID',
@@ -108,7 +107,6 @@ export async function createTestApp(env: Partial<Record<(typeof MANAGED_ENV)[num
     JWT_SECRET: jwtSecret,
     MONGODB_URI: mongo.getUri('goaylal-test'),
     ADMIN_EMAILS: ADMIN_EMAIL,
-    SEED_ON_BOOT: 'false',
     // Most suites make many calls from one client; the rate-limit suite re-enables it explicitly.
     RATE_LIMIT_DISABLED: 'true',
     ...env,

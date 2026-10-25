@@ -1,0 +1,427 @@
+{
+  "note": "Pпукет зургийн эх сурвалж. Wikimedia Commons зургууд (CC BY / CC BY-SA) зохиогчийн нэрийг заавал харуулна. Pexels зургуудад attribution шаардлагагүй. ph-att-10 нь Бангкок дахь Siam Niramit-ийн зураг, ph-att-07,09,12,13,14,15,16,17 нь ерөнхий (тухайн газрын биш) зураг.",
+  "images": {
+    "ph-att-01": [
+      {
+        "file": "1.webp",
+        "title": "Thalang Road, Old Phuket Town.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Christophe95",
+        "source": "https://commons.wikimedia.org/wiki/File:Thalang_Road,_Old_Phuket_Town.jpg",
+        "kb": 168
+      },
+      {
+        "file": "2.webp",
+        "title": "Thalang Road in Old Phuket Town.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Christophe95",
+        "source": "https://commons.wikimedia.org/wiki/File:Thalang_Road_in_Old_Phuket_Town.jpg",
+        "kb": 108
+      },
+      {
+        "file": "3.webp",
+        "title": "Thalang Road 3.jpg",
+        "license": "CC0",
+        "author": "Slleong",
+        "source": "https://commons.wikimedia.org/wiki/File:Thalang_Road_3.jpg",
+        "kb": 329
+      }
+    ],
+    "ph-att-02": [
+      {
+        "file": "1.webp",
+        "title": "Phuket - Kata Beach 001.jpg",
+        "license": "Public domain",
+        "author": "ADwarf",
+        "source": "https://commons.wikimedia.org/wiki/File:Phuket_-_Kata_Beach_001.jpg",
+        "kb": 170
+      },
+      {
+        "file": "2.webp",
+        "title": "Kata Beach1.jpg",
+        "license": "CC BY 2.0",
+        "author": "Radek Kucharski",
+        "source": "https://commons.wikimedia.org/wiki/File:Kata_Beach1.jpg",
+        "kb": 236
+      }
+    ],
+    "ph-att-03": [
+      {
+        "file": "1.webp",
+        "title": "Bangla Boxing Stadium Patong Thajsko 2018 2.jpg",
+        "license": "CC BY 4.0",
+        "author": "Karelj",
+        "source": "https://commons.wikimedia.org/wiki/File:Bangla_Boxing_Stadium_Patong_Thajsko_2018_2.jpg",
+        "kb": 226
+      }
+    ],
+    "ph-att-04": [
+      {
+        "file": "1.webp",
+        "title": "Thaïlande - Phuket - Tiger Kingdom (13306449394).jpg",
+        "license": "CC BY 2.0",
+        "author": "Nicolas Vollmer from Munich [Allemagne]",
+        "source": "https://commons.wikimedia.org/wiki/File:Tha%C3%AFlande_-_Phuket_-_Tiger_Kingdom_(13306449394).jpg",
+        "kb": 342
+      }
+    ],
+    "ph-att-05": [
+      {
+        "file": "1.webp",
+        "title": "Phuket Thailand Wat-Chalong-01.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "CEphoto, Uwe Aranas",
+        "source": "https://commons.wikimedia.org/wiki/File:Phuket_Thailand_Wat-Chalong-01.jpg",
+        "kb": 292
+      },
+      {
+        "file": "2.webp",
+        "title": "Wat Chalong - Phuket.jpg",
+        "license": "CC BY 2.0",
+        "author": "Valeria Bolotova",
+        "source": "https://commons.wikimedia.org/wiki/File:Wat_Chalong_-_Phuket.jpg",
+        "kb": 373
+      },
+      {
+        "file": "3.webp",
+        "title": "Wat Chalong Phuket (one of the temples).jpg",
+        "license": "CC0",
+        "author": "Deepak-nsk",
+        "source": "https://commons.wikimedia.org/wiki/File:Wat_Chalong_Phuket_(one_of_the_temples).jpg",
+        "kb": 198
+      }
+    ],
+    "ph-att-06": [
+      {
+        "file": "1.webp",
+        "title": "Sunset at Mai Khao Beach.jpg",
+        "license": "CC BY 2.0",
+        "author": "Dennis Wong",
+        "source": "https://commons.wikimedia.org/wiki/File:Sunset_at_Mai_Khao_Beach.jpg",
+        "kb": 40
+      }
+    ],
+    "ph-att-11": [
+      {
+        "file": "1.webp",
+        "title": "Sunset at Karon Beach, Phuket, Thailand 3.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Pather alexiy",
+        "source": "https://commons.wikimedia.org/wiki/File:Sunset_at_Karon_Beach,_Phuket,_Thailand_3.JPG",
+        "kb": 91
+      },
+      {
+        "file": "2.webp",
+        "title": "Sunset at Karon Beach, Phuket, Thailand.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Pather alexiy",
+        "source": "https://commons.wikimedia.org/wiki/File:Sunset_at_Karon_Beach,_Phuket,_Thailand.JPG",
+        "kb": 61
+      },
+      {
+        "file": "3.webp",
+        "title": "Sunset at Karon Beach, Phuket, Thailand 2.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Pather alexiy",
+        "source": "https://commons.wikimedia.org/wiki/File:Sunset_at_Karon_Beach,_Phuket,_Thailand_2.JPG",
+        "kb": 47
+      }
+    ],
+    "ph-att-18": [
+      {
+        "file": "1.webp",
+        "title": "Photography during the Simon Cabaret show is not allowed but the performers line up afterwards.jpg",
+        "license": "CC BY 2.0",
+        "author": "shankar s.",
+        "source": "https://commons.wikimedia.org/wiki/File:Photography_during_the_Simon_Cabaret_show_is_not_allowed_but_the_performers_line_up_afterwards.jpg",
+        "kb": 264
+      }
+    ],
+    "ph-att-19": [
+      {
+        "file": "1.webp",
+        "title": "The Big Buddha, Phuket.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Subhrajyoti07",
+        "source": "https://commons.wikimedia.org/wiki/File:The_Big_Buddha,_Phuket.jpg",
+        "kb": 129
+      },
+      {
+        "file": "2.webp",
+        "title": "Big Buddha - Phuket, Thailand.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Meissner24",
+        "source": "https://commons.wikimedia.org/wiki/File:Big_Buddha_-_Phuket,_Thailand.JPG",
+        "kb": 37
+      },
+      {
+        "file": "3.webp",
+        "title": "Big Buddha - Phuket.jpg",
+        "license": "CC0",
+        "author": "Mussi Katz",
+        "source": "https://commons.wikimedia.org/wiki/File:Big_Buddha_-_Phuket.jpg",
+        "kb": 202
+      }
+    ],
+    "ph-att-08": [
+      {
+        "file": "1.webp",
+        "title": "Isla Ko Phi Phi Don, Tailandia, 2013-08-19, DD 02.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Isla_Ko_Phi_Phi_Don,_Tailandia,_2013-08-19,_DD_02.JPG",
+        "kb": 98
+      },
+      {
+        "file": "2.webp",
+        "title": "Isla Ko Phi Phi Don, Tailandia, 2013-08-19, DD 12.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Isla_Ko_Phi_Phi_Don,_Tailandia,_2013-08-19,_DD_12.JPG",
+        "kb": 158
+      },
+      {
+        "file": "3.webp",
+        "title": "Isla Ko Phi Phi Don, Tailandia, 2013-08-19, DD 01.JPG",
+        "license": "CC BY-SA 3.0",
+        "author": "Diego Delso",
+        "source": "https://commons.wikimedia.org/wiki/File:Isla_Ko_Phi_Phi_Don,_Tailandia,_2013-08-19,_DD_01.JPG",
+        "kb": 72
+      }
+    ],
+    "ph-att-10": [
+      {
+        "file": "1.webp",
+        "title": "Siam Niramit Bangkok performer (2008).jpg",
+        "license": "CC BY 2.0",
+        "author": "joaquin uy",
+        "source": "https://commons.wikimedia.org/wiki/File:Siam_Niramit_Bangkok_performer_(2008).jpg",
+        "kb": 118
+      },
+      {
+        "file": "2.webp",
+        "title": "Siam Niramit Bangkok elephants (2014).jpg",
+        "license": "CC BY 2.0",
+        "author": "Kathy",
+        "source": "https://commons.wikimedia.org/wiki/File:Siam_Niramit_Bangkok_elephants_(2014).jpg",
+        "kb": 105
+      },
+      {
+        "file": "3.webp",
+        "title": "Siam Niramit Bangkok performer (2014).jpg",
+        "license": "CC BY 2.0",
+        "author": "Kathy",
+        "source": "https://commons.wikimedia.org/wiki/File:Siam_Niramit_Bangkok_performer_(2014).jpg",
+        "kb": 94
+      }
+    ],
+    "ph-att-07": [
+      {
+        "file": "1.webp",
+        "title": "colorful-parrots-playing-17537525",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/colorful-parrots-playing-17537525/",
+        "kb": 69
+      },
+      {
+        "file": "2.webp",
+        "title": "perched-macaw-birds-10849239",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/perched-macaw-birds-10849239/",
+        "kb": 70
+      },
+      {
+        "file": "3.webp",
+        "title": "vibrant-blue-and-yellow-macaws-perched-35000780",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/vibrant-blue-and-yellow-macaws-perched-35000780/",
+        "kb": 87
+      }
+    ],
+    "ph-att-09": [
+      {
+        "file": "1.webp",
+        "title": "a-tunnel-in-an-aquarium-13561441",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/a-tunnel-in-an-aquarium-13561441/",
+        "kb": 296
+      },
+      {
+        "file": "2.webp",
+        "title": "man-in-an-underwater-tunnel-5531441",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/man-in-an-underwater-tunnel-5531441/",
+        "kb": 60
+      },
+      {
+        "file": "3.webp",
+        "title": "child-exploring-underwater-tunnel-aquarium-36466275",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/child-exploring-underwater-tunnel-aquarium-36466275/",
+        "kb": 270
+      }
+    ],
+    "ph-att-12": [
+      {
+        "file": "1.webp",
+        "title": "a-man-performing-on-the-stage-11657969",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/a-man-performing-on-the-stage-11657969/",
+        "kb": 36
+      },
+      {
+        "file": "2.webp",
+        "title": "daring-acrobat-performing-high-jump-at-circus-39112698",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/daring-acrobat-performing-high-jump-at-circus-39112698/",
+        "kb": 80
+      },
+      {
+        "file": "3.webp",
+        "title": "acrobat-performing-handstand-under-spotlight-39112699",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/acrobat-performing-handstand-under-spotlight-39112699/",
+        "kb": 99
+      }
+    ],
+    "ph-att-13": [
+      {
+        "file": "1.webp",
+        "title": "colorful-water-park-slides-on-a-sunny-day-31166929",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/colorful-water-park-slides-on-a-sunny-day-31166929/",
+        "kb": 233
+      },
+      {
+        "file": "2.webp",
+        "title": "vibrant-water-park-slides-on-a-summer-day-40321953",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/vibrant-water-park-slides-on-a-summer-day-40321953/",
+        "kb": 303
+      },
+      {
+        "file": "3.webp",
+        "title": "close-up-photo-of-tube-slides-12475563",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/close-up-photo-of-tube-slides-12475563/",
+        "kb": 69
+      }
+    ],
+    "ph-att-14": [
+      {
+        "file": "1.webp",
+        "title": "majestic-elephants-in-lush-jungle-sanctuary-40043908",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/majestic-elephants-in-lush-jungle-sanctuary-40043908/",
+        "kb": 225
+      },
+      {
+        "file": "2.webp",
+        "title": "asian-elephant-in-chiang-mai-nature-sanctuary-31730950",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/asian-elephant-in-chiang-mai-nature-sanctuary-31730950/",
+        "kb": 240
+      },
+      {
+        "file": "3.webp",
+        "title": "asian-elephants-bathing-in-lush-forest-river-40043915",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/asian-elephants-bathing-in-lush-forest-river-40043915/",
+        "kb": 268
+      }
+    ],
+    "ph-att-15": [
+      {
+        "file": "1.webp",
+        "title": "dolphin-show-performance-in-outdoor-pool-30915666",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/dolphin-show-performance-in-outdoor-pool-30915666/",
+        "kb": 246
+      },
+      {
+        "file": "2.webp",
+        "title": "dolphins-jumping-out-of-the-water-13822902",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/dolphins-jumping-out-of-the-water-13822902/",
+        "kb": 134
+      },
+      {
+        "file": "3.webp",
+        "title": "dolphins-performing-high-jump-in-aquatic-show-30915665",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/dolphins-performing-high-jump-in-aquatic-show-30915665/",
+        "kb": 237
+      }
+    ],
+    "ph-att-16": [
+      {
+        "file": "1.webp",
+        "title": "adventurous-ziplining-through-the-tropical-forest-39609013",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/adventurous-ziplining-through-the-tropical-forest-39609013/",
+        "kb": 167
+      },
+      {
+        "file": "2.webp",
+        "title": "tourist-ziplining-in-adventure-park-23696872",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/tourist-ziplining-in-adventure-park-23696872/",
+        "kb": 242
+      },
+      {
+        "file": "3.webp",
+        "title": "man-on-a-zipline-10674304",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/man-on-a-zipline-10674304/",
+        "kb": 325
+      }
+    ],
+    "ph-att-17": [
+      {
+        "file": "1.webp",
+        "title": "photo-of-woman-walking-on-a-canopy-walkway-1273443",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/photo-of-woman-walking-on-a-canopy-walkway-1273443/",
+        "kb": 190
+      },
+      {
+        "file": "2.webp",
+        "title": "people-walking-on-a-suspension-bridge-in-the-woods-28379501",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/people-walking-on-a-suspension-bridge-in-the-woods-28379501/",
+        "kb": 527
+      },
+      {
+        "file": "3.webp",
+        "title": "brown-wooden-footbridge-in-a-forest-13414539",
+        "license": "Pexels License",
+        "author": "",
+        "source": "https://www.pexels.com/photo/brown-wooden-footbridge-in-a-forest-13414539/",
+        "kb": 280
+      }
+    ]
+  }
+}

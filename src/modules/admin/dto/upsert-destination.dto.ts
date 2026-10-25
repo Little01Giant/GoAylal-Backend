@@ -28,6 +28,19 @@ const CATEGORIES = Object.values(AttractionCategory);
 const TRANSPORT_TYPES = Object.values(TransportType);
 
 export class UpsertAttractionDto {
+  @ApiProperty({ required: false, description: 'Үнийг авсан Trip.com хуудас (дотоод, үнэ шинэчлэхэд)' })
+  @IsOptional()
+  @IsString()
+  @Matches(HTTP_URL, { message: `sourceUrl ${URL_MESSAGE}` })
+  @MaxLength(600)
+  sourceUrl?: string;
+
+  @ApiProperty({ required: false, example: '2026-10-23', description: 'Үнийг сүүлд шалгасан огноо (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'priceCheckedAt нь YYYY-MM-DD хэлбэртэй байх ёстой' })
+  priceCheckedAt?: string;
+
   @ApiProperty({ example: 'sh-att-01', description: 'Үзвэрийн тогтмол код (өөрчлөхгүй)' })
   @IsString()
   @MaxLength(64)
@@ -106,6 +119,19 @@ export class UpsertAttractionDto {
 }
 
 export class UpsertHotelDto {
+  @ApiProperty({ required: false, description: 'Үнийг авсан Trip.com хуудас (дотоод, үнэ шинэчлэхэд)' })
+  @IsOptional()
+  @IsString()
+  @Matches(HTTP_URL, { message: `sourceUrl ${URL_MESSAGE}` })
+  @MaxLength(600)
+  sourceUrl?: string;
+
+  @ApiProperty({ required: false, example: '2026-10-23', description: 'Үнийг сүүлд шалгасан огноо (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'priceCheckedAt нь YYYY-MM-DD хэлбэртэй байх ёстой' })
+  priceCheckedAt?: string;
+
   @ApiProperty({ example: 'hotel-sh-level-1' })
   @IsString()
   @MaxLength(64)
@@ -156,6 +182,19 @@ export class UpsertHotelDto {
 }
 
 export class UpsertTransportDto {
+  @ApiProperty({ required: false, description: 'Үнийг авсан Trip.com хуудас (дотоод, үнэ шинэчлэхэд)' })
+  @IsOptional()
+  @IsString()
+  @Matches(HTTP_URL, { message: `sourceUrl ${URL_MESSAGE}` })
+  @MaxLength(600)
+  sourceUrl?: string;
+
+  @ApiProperty({ required: false, example: '2026-10-23', description: 'Үнийг сүүлд шалгасан огноо (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'priceCheckedAt нь YYYY-MM-DD хэлбэртэй байх ёстой' })
+  priceCheckedAt?: string;
+
   @ApiProperty({ example: 'tr-sh-flight' })
   @IsString()
   @MaxLength(64)
