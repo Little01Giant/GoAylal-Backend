@@ -76,6 +76,23 @@ describe('Catalog: idempotent seeding and public contract', () => {
     expect(data.attractions[0]).toMatchObject({ id: expect.any(String), estimatedCost: expect.any(Number) });
   });
 
+  it('stores the Trip.com price source in the database but never returns it from the public API', async () => {
+    const sourced = ALL_DESTINATIONS.find((c) => c.attractions.some((a) => a.sourceUrl !== undefined));
+    if (!sourced) return;
+    const seeded = sourced.attractions.find((a) => a.sourceUrl !== undefined)!;
+    const row = await attractions.findOne({ destinationKey: sourced.key, seedId: seeded.id }).lean();
+    expect(row?.sourceUrl).toBe(seeded.sourceUrl);
+    expect(row?.priceCheckedAt).toBe(seeded.priceCheckedAt);
+
+    const res = await ctx.http.get(`/api/v1/destinations/${sourced.key}`).expect(200);
+    const everything = JSON.stringify(res.body);
+    expect(everything).not.toContain('sourceUrl');
+    expect(everything).not.toContain('priceCheckedAt');
+    const list = JSON.stringify((await ctx.http.get('/api/v1/destinations').expect(200)).body);
+    expect(list).not.toContain('sourceUrl');
+    expect(list).not.toContain('priceCheckedAt');
+  });
+
   it('lists destinations and 404s on an unknown key', async () => {
     const list = await ctx.http.get('/api/v1/destinations').expect(200);
     expect(list.body.data.map((d: { key: string }) => d.key)).toContain(city.key);

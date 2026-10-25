@@ -13,6 +13,25 @@ type LeanAttraction = Attraction & { _id: Types.ObjectId };
 type LeanHotel = Hotel & { _id: Types.ObjectId };
 type LeanTransport = Transport & { _id: Types.ObjectId };
 
+interface PriceSource {
+  sourceUrl?: string;
+  priceCheckedAt?: string;
+}
+
+/** The Trip.com source of a price is internal bookkeeping for price refreshes; it never leaves the API. */
+function withoutPriceSource<T extends PriceSource>({ sourceUrl: _url, priceCheckedAt: _checked, ...rest }: T): Omit<T, keyof PriceSource> {
+  return rest;
+}
+
+function publicCity(city: SeedDestinationCity): SeedDestinationCity {
+  return {
+    ...city,
+    attractions: city.attractions.map(withoutPriceSource),
+    hotels: city.hotels.map(withoutPriceSource),
+    transports: city.transports.map(withoutPriceSource),
+  };
+}
+
 export interface SuggestedTripItem {
   readonly id: string;
   readonly title: string;
@@ -63,7 +82,7 @@ export class DestinationsService implements OnModuleInit {
     const docs = await this.destinationModel.find(filter).lean<Destination[]>().exec();
     if (docs.length === 0) {
       // Graceful fallback from the in-memory seed catalog
-      return ALL_DESTINATIONS.filter((d) => !query?.countryKey || d.countryKey === query.countryKey);
+      return ALL_DESTINATIONS.filter((d) => !query?.countryKey || d.countryKey === query.countryKey).map(publicCity);
     }
     return docs;
   }
@@ -77,7 +96,7 @@ export class DestinationsService implements OnModuleInit {
         this.transportModel.find({ destinationKey: key }).lean().exec(),
       ]);
 
-      return {
+      return publicCity({
         key: destination.key,
         name: destination.name,
         country: destination.country,
@@ -88,13 +107,13 @@ export class DestinationsService implements OnModuleInit {
         attractions: (attractions as LeanAttraction[]).map((a) => ({ ...a, id: a._id.toString() })),
         hotels: (hotels as LeanHotel[]).map((h) => ({ ...h, id: h._id.toString() })),
         transports: (transports as LeanTransport[]).map((t) => ({ ...t, id: t._id.toString() })),
-      };
+      });
     }
 
     // Fallback to static seed data if not found in db
     const seed = ALL_DESTINATIONS.find((c) => c.key === key);
     if (seed) {
-      return seed;
+      return publicCity(seed);
     }
     throw new NotFoundException(`'${key}' аяллын чиглэл олдсонгүй.`);
   }
@@ -166,6 +185,28 @@ export class DestinationsService implements OnModuleInit {
           'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
         ],
       },
+      {
+        id: 'trip-phuket',
+        title: 'Пукет хотын аяллын хөтөлбөр',
+        destination: 'Пукет хот, Тайланд',
+        country: 'Тайланд',
+        countryKey: 'thailand',
+        countryFlag: '🇹🇭',
+        durationText: '3 – 10 өдөр',
+        daysCount: 5,
+        category: 'nature',
+        categoryLabel: 'Бэлэн төлөвлөгөө',
+        startingPrice: 2619000,
+        imageUrl: 'https://pub-83fca96d5b9048f795fabbfcdabba275.r2.dev/attractions/ph-att-08/1.webp',
+        rating: 4.8,
+        reviewsCount: 0,
+        highlights: [
+          'Пхи Пхи арлууд',
+          'Пукетийн Их Бурхан',
+          'Ката далайн эрэг',
+          'Буудал, тээвэр, хоногоо өөртөө тохируулах боломжтой',
+        ],
+      },
     ];
   }
 
@@ -224,6 +265,8 @@ export class DestinationsService implements OnModuleInit {
         images: a.images ?? (a.imageUrl ? [a.imageUrl] : []),
         rating: a.rating,
         highlights: a.highlights ?? [],
+        sourceUrl: a.sourceUrl,
+        priceCheckedAt: a.priceCheckedAt,
       });
     }
     for (const h of city.hotels) {
@@ -236,6 +279,8 @@ export class DestinationsService implements OnModuleInit {
         locationDesc: h.locationDesc,
         amenities: h.amenities ?? [],
         badge: h.badge,
+        sourceUrl: h.sourceUrl,
+        priceCheckedAt: h.priceCheckedAt,
       });
     }
     for (const t of city.transports) {
@@ -251,6 +296,8 @@ export class DestinationsService implements OnModuleInit {
         departureFrom: t.departureFrom,
         arrivalAt: t.arrivalAt,
         features: t.features ?? [],
+        sourceUrl: t.sourceUrl,
+        priceCheckedAt: t.priceCheckedAt,
       });
     }
   }

@@ -50,6 +50,14 @@ export class Transport {
 
   @Prop({ type: [String], default: [] })
   features?: string[];
+
+  /** Trip.com page the price came from (internal, for price refreshes). */
+  @Prop({ required: false })
+  sourceUrl?: string;
+
+  /** YYYY-MM-DD the price was last checked. */
+  @Prop({ required: false })
+  priceCheckedAt?: string;
 }
 
 export const TransportSchema = SchemaFactory.createForClass(Transport);

@@ -38,6 +38,16 @@ describe('seed catalog pricing rules (AGENTS.md: direct MNT, 3 hotel tiers, per-
       }
     });
 
+    it('keeps a well-formed Trip.com source for prices that have one (internal, for price refreshes)', () => {
+      for (const i of [...city.attractions, ...city.hotels, ...city.transports]) {
+        if (i.sourceUrl !== undefined) expect(i.sourceUrl).toMatch(/^https:\/\/([a-z]+\.)?trip\.com\/\S+$/);
+        if (i.priceCheckedAt !== undefined) {
+          expect(i.priceCheckedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+          expect(i.sourceUrl).toBeDefined(); // a checked price must say where it was checked
+        }
+      }
+    });
+
     it('offers valid transport types with positive integer per-person MNT prices', () => {
       expect(city.transports.length).toBeGreaterThan(0);
       for (const t of city.transports) {
