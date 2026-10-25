@@ -28,8 +28,13 @@ import { isDuplicateKeyError } from '../../common/utils/is-duplicate-key-error.j
 import { UserRole } from '../auth/schemas/user.schema.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 
-/** A pending invoice older than this is re-checked with QPay and then expired instead of being reused. */
+/**
+ * How long an unpaid invoice is offered to the payer, counted from its creation. A pending invoice older than this
+ * is re-checked with QPay and then expired instead of being reused; the payer's dialog counts down to the same moment.
+ */
 const INVOICE_REUSE_WINDOW_MS = 15 * 60 * 1000;
+/** Minimum gap between two QPay checks made because an invoice ran out of time. */
+const EXPIRY_CHECK_SPACING_MS = 30 * 1000;
 /** Reference numbers are numbered per calendar day in Ulaanbaatar time (UTC+8). */
 const ULAANBAATAR_OFFSET_MS = 8 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 100;
@@ -41,6 +46,8 @@ export interface QPayInvoiceResult {
   readonly transactionId: Types.ObjectId | string;
   readonly transactionNumber: string;
   readonly invoiceNumber: string;
+  /** When the invoice stops being offered (ISO). The payer's countdown is derived from this, not from a client constant. */
+  readonly expiresAt: string;
   /** What the payer is charged (after any discount). */
   readonly amount: number;
   /** The plan price before the discount; equal to `amount` when no discount applies. */
@@ -78,6 +85,10 @@ export interface PaymentVerificationResult {
   readonly verified: boolean;
   readonly transactionNumber: string;
   readonly status: string;
+  /** When the invoice stops being offered (ISO); informational once the payment is no longer pending. */
+  readonly expiresAt: string;
+  /** Set once the payment is completed (ISO). */
+  readonly paidAt?: string | undefined;
 }
 
 export interface BulkTransactionsResult {
@@ -99,6 +110,11 @@ const STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
   [PaymentStatus.EXPIRED]: 'Хугацаа дууссан',
   [PaymentStatus.REFUNDED]: 'Буцаагдсан',
 };
+
+/** The moment an invoice stops being offered to the payer. */
+function invoiceExpiresAt(transaction: { createdAt?: Date | undefined }): Date {
+  return new Date((transaction.createdAt?.getTime() ?? Date.now()) + INVOICE_REUSE_WINDOW_MS);
+}
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -233,6 +249,15 @@ export class PaymentsService {
     return this.verifyTransaction(transaction, options.simulate === true);
   }
 
+  /**
+   * Public form of `verifyPayment`: only the transaction's own id is accepted. Transaction and invoice numbers are
+   * sequential and guessable, so they must not let anyone read or trigger another payer's payment.
+   */
+  async verifyPaymentById(transactionId: string, options: { simulate?: boolean } = {}): Promise<PaymentVerificationResult> {
+    const transaction = await this.findByTransactionId(transactionId);
+    return this.verifyTransaction(transaction, options.simulate === true);
+  }
+
   /** QPay webhook: the body is never trusted, the payment is re-checked with QPay. */
   async handleCallback(paymentId: string | undefined): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
     const transaction = paymentId ? await this.findTransaction(paymentId) : null;
@@ -259,28 +284,57 @@ export class PaymentsService {
   }
 
   /**
-   * Status for the payment dialog's poll. It reads our own record. QPay is asked only for an invoice that has
-   * waited QPAY_STATUS_CHECK_INTERVAL_S, and then at most once per interval, so a dialog left open does not
-   * hammer QPay. Normally the callback has already settled the payment; this is the safety net if it never arrived.
+   * Status for the payment dialog's poll. It reads our own record; QPay is not asked while an invoice is within
+   * its time. Once it has run out of time it is re-checked with QPay exactly once and, if still unpaid, expired
+   * (and cancelled at QPay), so the dialog and the database agree. Before that, QPay is asked only when
+   * QPAY_STATUS_CHECK_INTERVAL_S is set, at most once per interval (a safety net for a callback that never arrived).
    */
-  async getPaymentStatus(identifier: string): Promise<PaymentVerificationResult> {
-    const transaction = await this.findTransaction(identifier);
-    if (!transaction) {
-      throw new NotFoundException('Гүйлгээ олдсонгүй.');
+  async getPaymentStatus(transactionId: string): Promise<PaymentVerificationResult> {
+    const transaction = await this.findByTransactionId(transactionId);
+    if (transaction.status === PaymentStatus.COMPLETED) {
+      await this.unlockItinerary(transaction);
+      return this.toVerification(transaction);
+    }
+    if (transaction.status !== PaymentStatus.PENDING) {
+      return this.toVerification(transaction);
+    }
+    if (Date.now() >= invoiceExpiresAt(transaction).getTime()) {
+      return this.expireIfUnpaid(transaction);
     }
     const interval = this.statusCheckIntervalMs;
     // The callback normally settles the payment within seconds, so QPay is not asked until the invoice has
     // been waiting a full interval, and then at most once per interval.
     const waitedLongEnough = Date.now() - (transaction.createdAt?.getTime() ?? 0) >= interval;
-    if (
-      interval > 0 &&
-      transaction.status === PaymentStatus.PENDING &&
-      waitedLongEnough &&
-      (await this.claimQpayCheck(transaction._id as Types.ObjectId, interval))
-    ) {
+    if (interval > 0 && waitedLongEnough && (await this.claimQpayCheck(transaction._id as Types.ObjectId, interval))) {
       return this.verifyTransaction(transaction, false);
     }
     return this.toVerification(transaction);
+  }
+
+  /**
+   * An invoice that ran out of time: ask QPay once (a payment made at the last moment is settled, not lost), and
+   * expire it only if it is still unpaid. A payment that arrives after this still settles (expired -> completed).
+   */
+  private async expireIfUnpaid(transaction: PaymentTransactionDocument): Promise<PaymentVerificationResult> {
+    const id = transaction._id as Types.ObjectId;
+    if (!(await this.claimQpayCheck(id, EXPIRY_CHECK_SPACING_MS))) {
+      // Another request is already checking it; the next poll sees the outcome.
+      return this.toVerification((await this.paymentModel.findById(id)) ?? transaction);
+    }
+    const result = await this.verifyTransaction(transaction, false);
+    if (result.verified) {
+      return result;
+    }
+    const expired = await this.paymentModel.findOneAndUpdate(
+      { _id: id, status: PaymentStatus.PENDING },
+      { $set: { status: PaymentStatus.EXPIRED } },
+      { returnDocument: 'after' },
+    );
+    if (expired) {
+      this.logger.log(`Payment ${expired.transactionNumber} expired`);
+      await this.cancelAtQpay([expired]);
+    }
+    return this.toVerification(expired ?? (await this.paymentModel.findById(id)) ?? transaction);
   }
 
   /** Atomically reserves the right to ask QPay about this invoice now; false when it was asked recently. */
@@ -462,6 +516,17 @@ export class PaymentsService {
     return itinerary;
   }
 
+  /** The payer-facing lookup: by the transaction's own ObjectId only, so another payment cannot be guessed. */
+  private async findByTransactionId(transactionId: string): Promise<PaymentTransactionDocument> {
+    const transaction = Types.ObjectId.isValid(transactionId)
+      ? await this.paymentModel.findById(transactionId).exec()
+      : null;
+    if (!transaction) {
+      throw new NotFoundException('Гүйлгээ олдсонгүй.');
+    }
+    return transaction;
+  }
+
   private async findTransaction(identifier: string, lean = false): Promise<PaymentTransactionDocument | null> {
     const filter = Types.ObjectId.isValid(identifier)
       ? { _id: new Types.ObjectId(identifier) }
@@ -485,6 +550,8 @@ export class PaymentsService {
         const current = settled ?? (await this.paymentModel.findById(transaction._id));
         return this.toVerification(current ?? transaction);
       }
+    } else if (transaction.status === PaymentStatus.COMPLETED) {
+      await this.unlockItinerary(transaction);
     }
     return this.toVerification(transaction);
   }
@@ -507,13 +574,22 @@ export class PaymentsService {
     return settled;
   }
 
-  private async afterSettlement(transaction: PaymentTransactionDocument): Promise<void> {
-    if (transaction.itineraryId) {
-      await this.itineraryModel.updateOne(
-        { _id: transaction.itineraryId, status: { $in: [ItineraryStatus.DRAFT, ItineraryStatus.SAVED] } },
-        { $set: { status: ItineraryStatus.UNLOCKED } },
-      );
+  /**
+   * Unlocks the paid itinerary. Idempotent and safe to repeat, so a completed payment whose itinerary was left
+   * locked (the process stopped between the two writes) is repaired the next time the payment is read.
+   */
+  private async unlockItinerary(transaction: PaymentTransactionDocument): Promise<void> {
+    if (!transaction.itineraryId) {
+      return;
     }
+    await this.itineraryModel.updateOne(
+      { _id: transaction.itineraryId, status: { $in: [ItineraryStatus.DRAFT, ItineraryStatus.SAVED] } },
+      { $set: { status: ItineraryStatus.UNLOCKED } },
+    );
+  }
+
+  private async afterSettlement(transaction: PaymentTransactionDocument): Promise<void> {
+    await this.unlockItinerary(transaction);
 
     if ((await this.settings.getEffective()).emailEnabled && transaction.customerEmail) {
       const snapshot = transaction.planSnapshot ?? {};
@@ -569,6 +645,8 @@ export class PaymentsService {
       verified: transaction.status === PaymentStatus.COMPLETED,
       transactionNumber: transaction.transactionNumber,
       status: transaction.status,
+      expiresAt: invoiceExpiresAt(transaction).toISOString(),
+      ...(transaction.paidAt ? { paidAt: transaction.paidAt.toISOString() } : {}),
     };
   }
 
@@ -577,6 +655,7 @@ export class PaymentsService {
       transactionId: transaction._id as Types.ObjectId,
       transactionNumber: transaction.transactionNumber,
       invoiceNumber: transaction.invoiceNumber,
+      expiresAt: invoiceExpiresAt(transaction).toISOString(),
       amount: transaction.amount,
       // Invoices created before pricing plans existed carry no breakdown: they had no discount.
       baseAmount: transaction.baseAmount ?? transaction.amount,

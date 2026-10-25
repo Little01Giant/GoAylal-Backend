@@ -100,10 +100,10 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Төлбөрийн төлөв (хуудасны шалгалтад): QPay-г зөвхөн хааяа асууна',
     description:
-      'Манай бүртгэлээс уншина. QPay-аас зөвхөн нэхэмжлэх QPAY_STATUS_CHECK_INTERVAL_S секунд хүлээгдсэний дараа, тэр хугацаанд нэг л удаа асууна (0 = хэзээ ч асуухгүй, зөвхөн callback).',
+      'Манай бүртгэлээс уншина. Нэхэмжлэхийн хугацаа (expiresAt) дуустал QPay-аас асуухгүй (QPAY_STATUS_CHECK_INTERVAL_S > 0 үед тэр хугацаанд нэг л удаа асууна). Хугацаа дуусмагц QPay-г нэг удаа шалгаад төлөгдөөгүй бол expired болгоно.',
   })
-  @ApiParam({ name: 'transactionId', description: 'Гүйлгээний дугаар эсвэл ID' })
-  @ApiResponse({ status: 200, description: 'Төлбөрийн төлөв' })
+  @ApiParam({ name: 'transactionId', description: 'Гүйлгээний ID (ObjectId). Дараалсан TRX-/INV- дугаар хүлээн авахгүй.' })
+  @ApiResponse({ status: 200, description: 'Төлбөрийн төлөв: status, verified, expiresAt, paidAt' })
   async getPaymentStatus(@Param('transactionId') transactionId: string): Promise<PaymentVerificationResult> {
     return this.paymentsService.getPaymentStatus(transactionId);
   }
@@ -113,13 +113,13 @@ export class PaymentsController {
   @UseGuards(RateLimitGuard)
   @RateLimit(60)
   @ApiOperation({ summary: 'Төлбөр баталгаажуулах (зөвхөн QPay баталгаажуулсан үед settle хийнэ)' })
-  @ApiParam({ name: 'transactionId', description: 'Гүйлгээний дугаар эсвэл ID' })
+  @ApiParam({ name: 'transactionId', description: 'Гүйлгээний ID (ObjectId). Дараалсан TRX-/INV- дугаар хүлээн авахгүй.' })
   @ApiResponse({ status: 200, description: 'Төлбөрийн баталгаажуулалтын хариу' })
   async verifyPayment(
     @Param('transactionId') transactionId: string,
     @Body() body: VerifyPaymentDto,
   ): Promise<PaymentVerificationResult> {
-    return this.paymentsService.verifyPayment(transactionId, { simulate: body.simulate === true });
+    return this.paymentsService.verifyPaymentById(transactionId, { simulate: body.simulate === true });
   }
 
   @Get('my')
