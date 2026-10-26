@@ -5,6 +5,11 @@ describe('parseTripRequest', () => {
     expect(parseTripRequest('Токио руу аялмаар байна')).toEqual({ cityKey: 'tokyo', days: 5, travelers: 2 });
   });
 
+  it('detects Hanoi and Halong Bay before the country-level entries', () => {
+    expect(parseTripRequest('Ханой 5 өдөр').cityKey).toBe('hanoi');
+    expect(parseTripRequest('Halong bay руу явна').cityKey).toBe('hanoi');
+  });
+
   it('returns no city instead of defaulting to beijing', () => {
     expect(parseTripRequest('Сайн байна уу').cityKey).toBeUndefined();
   });

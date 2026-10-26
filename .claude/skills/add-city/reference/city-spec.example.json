@@ -1,0 +1,98 @@
+{
+  "key": "example-city",
+  "code": "ex",
+  "name": "Жишээ хот",
+  "country": "Тайланд",
+  "countryKey": "thailand",
+  "flag": "🇹🇭",
+  "tag": "Арал, далайн эрэг & адал явдал",
+  "description": "Хотын 1-2 өгүүлбэр тайлбар (Монголоор), онцлох үзвэрүүдийг дурдана.",
+  "priceCheckedAt": "2026-10-23",
+  "attractions": [
+    {
+      "n": 1,
+      "rank": 1,
+      "name": "Үзвэрийн нэр (Монголоор)",
+      "nameEn": "English name from Trip.com",
+      "category": "nature",
+      "region": "District, City",
+      "estimatedCost": 0,
+      "estimatedHours": 2,
+      "rating": 4.7,
+      "highlights": [
+        "Онцлох зүйл 1",
+        "Онцлох зүйл 2",
+        "Онцлох зүйл 3"
+      ],
+      "description": "1-2 өгүүлбэр тайлбар.",
+      "sourceUrl": "https://www.trip.com/travel-guide/attraction/example/place-123?curr=MNT&locale=en-XX&poiType=3&scene=ticket"
+    }
+  ],
+  "hotels": [
+    {
+      "starRating": 2,
+      "name": "Хямд буудал (Төсөвт 2 од)",
+      "pricePerNight": 100000,
+      "imageUrl": "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80",
+      "locationDesc": "Байршил, жишээ нь Trip.com дээрх тухайн түвшний загвар",
+      "amenities": [
+        "Үнэгүй Wi-Fi",
+        "Халуун ус",
+        "24 цагийн хүлээн авах",
+        "Агааржуулагч"
+      ],
+      "badge": "Төсөвт ээлтэй",
+      "sourceUrl": "https://www.trip.com/hotels/list?city=0&cityName=Example&checkin=2026-11-23&checkout=2026-11-24&adult=1&crn=1&curr=MNT&locale=en-XX"
+    },
+    {
+      "starRating": 3,
+      "name": "Энгийн буудал (Стандарт 3 од)",
+      "pricePerNight": 120000,
+      "imageUrl": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+      "locationDesc": "Төвийн бүс",
+      "amenities": [
+        "Үнэгүй өндөр хурдны Wi-Fi",
+        "Лифт",
+        "Өдөр тутмын цэвэрлэгээ"
+      ],
+      "badge": "Тохилог сонголт",
+      "sourceUrl": "https://www.trip.com/hotels/list?city=0&cityName=Example&checkin=2026-11-23&checkout=2026-11-24&adult=1&crn=1&curr=MNT&locale=en-XX"
+    },
+    {
+      "starRating": 5,
+      "name": "Тансаг буудал (Люкс 5 од)",
+      "pricePerNight": 400000,
+      "imageUrl": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80",
+      "locationDesc": "Дээд зэрэглэлийн тав тух",
+      "amenities": [
+        "Цэвэр усан сан",
+        "Фитнесс төв",
+        "Спа",
+        "24 цагийн өрөөний үйлчилгээ",
+        "Консьерж"
+      ],
+      "badge": "Дээд зэрэглэл",
+      "sourceUrl": "https://www.trip.com/hotels/list?city=0&cityName=Example&checkin=2026-11-23&checkout=2026-11-24&adult=1&crn=1&curr=MNT&locale=en-XX"
+    }
+  ],
+  "transports": [
+    {
+      "type": "flight",
+      "title": "Дамжин нисэх нислэг",
+      "durationText": "11-14 цаг",
+      "pricePerPerson": 2000000,
+      "description": "Улаанбаатар (UBN) → ... → ... нислэг (Trip.com 1 сарын өмнөх эрт захиалгын үнэ, 2 талдаа)",
+      "badge": "Хамгийн хурдан",
+      "provider": "Trip.com",
+      "departureFrom": "Улаанбаатар (UBN)",
+      "arrivalAt": "Хотын нисэх буудал",
+      "features": [
+        "1. Эхний хэсэг",
+        "2. Хоёр дахь хэсэг",
+        "Тээш багтсан (Round-trip)",
+        "2 талын зардал багтсан"
+      ],
+      "sourceUrl": "https://www.trip.com/flights/a-to-b/tickets-aaa-bbb/?dcity=aaa&acity=bbb&ddate=2026-11-23&rdate=2026-11-28&flighttype=rt&curr=MNT&locale=en-XX&quantity=1"
+    }
+  ]
+}
