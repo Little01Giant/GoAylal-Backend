@@ -328,7 +328,7 @@ export class AdminService implements OnModuleInit {
   async createTrip(dto: CreateSuggestedTripDto): Promise<SuggestedTripDocument> {
     const slug = dto.slug.trim();
     if (await this.tripModel.exists({ slug })) {
-      throw new ConflictException(`'${dto.slug}' кодтой аяллын хөтөлбөр бүртгэгдсэн байна.`);
+      throw new ConflictException(`'${dto.slug}' кодтой аяллын төлөвлөгөө бүртгэгдсэн байна.`);
     }
 
     return this.tripModel.create({
@@ -369,7 +369,7 @@ export class AdminService implements OnModuleInit {
       (Types.ObjectId.isValid(id) ? await this.tripModel.findById(id) : null) ??
       (await this.tripModel.findOne({ slug: id }));
     if (!trip) {
-      throw new NotFoundException('Аяллын хөтөлбөр олдсонгүй.');
+      throw new NotFoundException('Аяллын төлөвлөгөө олдсонгүй.');
     }
     return trip;
   }

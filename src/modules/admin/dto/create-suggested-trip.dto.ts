@@ -22,7 +22,7 @@ export class CreateSuggestedTripDto {
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, { message: 'slug зөвхөн жижиг латин үсэг, тоо, зураас агуулна' })
   slug: string;
 
-  @ApiProperty({ example: 'Шанхай хотын аяллын хөтөлбөр' })
+  @ApiProperty({ example: 'Шанхай хотын аяллын төлөвлөгөө' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)

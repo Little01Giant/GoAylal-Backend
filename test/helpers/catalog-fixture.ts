@@ -51,6 +51,16 @@ export function makeCity(key = 'beijing', name = 'Бээжин', attractionCount
         sourceUrl: SOURCE,
         priceCheckedAt: '2026-10-25',
       },
+      {
+        // a second route of the same type: a city may have several routes per type
+        id: `tr-${code}-flight-2`,
+        type: 'flight',
+        title: 'Хөх хотоор дамжих нислэг',
+        durationText: '6 цаг',
+        pricePerPerson: 1_100_000,
+        sourceUrl: SOURCE,
+        priceCheckedAt: '2026-10-25',
+      },
     ],
   };
 }

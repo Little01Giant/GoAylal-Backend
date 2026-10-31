@@ -28,7 +28,7 @@ Everything below was learned adding Пукет. Follow the order; stop at the tw
 - Close the Chrome tab you opened when done.
 
 ## 2. Write the spec
-Copy `reference/city-spec.example.json` to a scratch folder, fill it in (including `sourceUrl` on every attraction, hotel and transport, and a spec-level `priceCheckedAt`). `code` is a 2-3 letter prefix used in ids (`bj`, `sh`, `ph`); it must be unused. `rank` 1..N is popularity order (the planner preselects the first 10). Categories: nature, historical, cultural, adventure, city, culinary. Transport `type`s: `flight`, `combined`, `overland`, at most one of each; a user route that mixes ground + flight is `combined`.
+Copy `reference/city-spec.example.json` to a scratch folder, fill it in (including `sourceUrl` on every attraction, hotel and transport, and a spec-level `priceCheckedAt`). `code` is a 2-3 letter prefix used in ids (`bj`, `sh`, `ph`); it must be unused. `rank` 1..N is popularity order (the planner preselects the first 10). Categories: nature, historical, cultural, adventure, city, culinary. Transport `type`s: `flight`, `combined`, `overland`; a user route that mixes ground + flight (or two flights through a hub) is `combined`. **Every route the user gives becomes its own transport**, including several of the same type (up to 8 per city); each needs a unique `title` that names its route (e.g. "Бээжингээр дамжих нислэг", "Хөх хотоор дамжих нислэг"). The first route of a type gets id `tr-<code>-<type>`, later ones `tr-<code>-<type>-2`, `-3`. If one leg's price cannot be read (e.g. a bus), do not invent it: skip that route and tell the user which price is missing.
 
 ## 3. Photos (staging only, nothing uploaded yet)
 Staging layout: `<stage>/<code>-att-NN/{1,2,3}.webp`.
@@ -46,7 +46,7 @@ Staging layout: `<stage>/<code>-att-NN/{1,2,3}.webp`.
 
 ## 4b. Ready plan (suggested trip) - required for every city
 A city is not done until it has its ready plan `trip-<key>`, otherwise it never shows on the home page or `/suggestions`. It is a `suggested_trips` document in Atlas; the code has no fallback list.
-1. Fields: `slug: 'trip-<key>'`, `title: '<Хотын нэр> хотын аяллын хөтөлбөр'`, `destination: '<Хот>, <Улс>'`, `country`, `countryKey`, `countryFlag`, `durationText: '3 – 10 өдөр'`, `daysCount: 5`, `category` (the city's main category), `categoryLabel: 'Бэлэн төлөвлөгөө'`, `startingPrice`, `imageUrl` (rank-1 attraction photo on R2), `rating`, `reviewsCount`, `highlights` (4 strings: top attractions + the transport option), `isActive: true`.
+1. Fields: `slug: 'trip-<key>'`, `title: '<Хотын нэр> хотын аяллын төлөвлөгөө'`, `destination: '<Хот>, <Улс>'`, `country`, `countryKey`, `countryFlag`, `durationText: '3 – 10 өдөр'`, `daysCount: 5`, `category` (the city's main category), `categoryLabel: 'Бэлэн төлөвлөгөө'`, `startingPrice`, `imageUrl` (rank-1 attraction photo on R2), `rating`, `reviewsCount`, `highlights` (4 strings: top attractions + the transport option), `isActive: true`.
 2. `startingPrice` = cheapest tier hotel x 4 nights + cheapest transport + the first 10 attractions (rank 1..10), per person, MNT integer. Compute it from the spec, do not guess.
 3. Written at GATE 2 together with the city: upsert by `slug` with a one-off script (copy it next to `package.json`, delete after) or `POST /admin/trips`. Verify with `GET /destinations/suggested-trips` that `trip-<key>` is returned.
 

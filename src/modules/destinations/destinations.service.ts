@@ -136,7 +136,7 @@ export class DestinationsService {
             countryKey: city.countryKey,
             flag: city.flag,
             tag: city.tag,
-            description: city.description ?? `${city.name} аяллын бүрэн хөтөлбөр`,
+            description: city.description ?? `${city.name} аяллын бүрэн төлөвлөгөө`,
             imageUrl: firstAttraction?.imageUrl,
             ...(options.popular === undefined ? {} : { popular: options.popular }),
           },

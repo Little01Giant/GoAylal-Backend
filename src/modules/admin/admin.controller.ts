@@ -111,7 +111,7 @@ export class AdminController {
 
   @Get('trips')
   @ApiOperation({ summary: 'Бүх бэлэн төлөвлөгөө авах' })
-  @ApiResponse({ status: 200, description: 'Бэлэн аяллын хөтөлбөрүүд' })
+  @ApiResponse({ status: 200, description: 'Бэлэн аяллын төлөвлөгөөнүүд' })
   async getTrips(): Promise<SuggestedTripDocument[]> {
     return this.adminService.getTrips();
   }
