@@ -76,6 +76,14 @@ describe('Catalog: database-only cities, idempotent upsert and public contract',
     expect(data.attractions[0]).toMatchObject({ id: expect.any(String), estimatedCost: expect.any(Number) });
   });
 
+  it('keeps several routes of the same type and returns every one of them', async () => {
+    const flights = city.transports.filter((t) => t.type === 'flight');
+    expect(flights.length).toBeGreaterThan(1);
+    const res = await ctx.http.get(`/api/v1/destinations/${city.key}`).expect(200);
+    const returned = (res.body.data.transports as { title: string; type: string }[]).filter((t) => t.type === 'flight');
+    expect(returned.map((t) => t.title).sort()).toEqual(flights.map((t) => t.title).sort());
+  });
+
   it('stores the Trip.com price source in the database but never returns it from the public API', async () => {
     const seeded = city.attractions[0]!;
     const row = await attractions.findOne({ destinationKey: city.key, seedId: seeded.id }).lean();

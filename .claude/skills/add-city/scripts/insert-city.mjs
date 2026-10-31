@@ -5,7 +5,7 @@
  *   node insert-city.mjs <spec.json> [--images <stagingDir>] [--dry-run]
  *
  * Spec (see ../reference/city-spec.example.json): city fields + code + attractions[] + hotels[3] + transports[].
- * Builds ids (<code>-att-NN, hotel-<code>-level-N, tr-<code>-<type>) and R2 image URLs.
+ * Builds ids (<code>-att-NN, hotel-<code>-level-N, tr-<code>-<type>[-N]) and R2 image URLs.
  * Every attraction, hotel and transport must carry `sourceUrl` (the Trip.com page its price came from);
  * `priceCheckedAt` defaults to the spec-level value or today.
  * With --images, each attraction's `images` array follows the files actually present in
@@ -81,13 +81,23 @@ const hotels = (spec.hotels ?? []).map((h, i) => {
 });
 check(hotels.map((h) => h.starRating).sort().join() === '2,3,5', 'hotels must be exactly the 2, 3 and 5 star tiers');
 
+/**
+ * A city may have several routes, including several of the same type (e.g. two `flight` routes).
+ * The first route of a type keeps the id `tr-<code>-<type>` (so existing cities are unchanged),
+ * later ones get `-2`, `-3`, ... Every route needs its own title so travellers can tell them apart.
+ */
+const seenPerType = {};
 const transports = (spec.transports ?? []).map((t) => {
   check(TRANSPORT_TYPES.includes(t.type), `transport: bad type ${t.type}`);
   check(Number.isInteger(t.pricePerPerson) && t.pricePerPerson > 0, `transport ${t.type}: pricePerPerson must be a positive integer MNT`);
-  return { id: `tr-${spec.code}-${t.type}`, ...t, ...source(`transport ${t.type}`, t) };
+  check(t.title && t.durationText && t.description, `transport ${t.type}: title/durationText/description required`);
+  const n = (seenPerType[t.type] = (seenPerType[t.type] ?? 0) + 1);
+  const id = n === 1 ? `tr-${spec.code}-${t.type}` : `tr-${spec.code}-${t.type}-${n}`;
+  return { id, ...t, ...source(`transport ${id}`, t) };
 });
 check(transports.length > 0, 'need at least one transport');
-check(new Set(transports.map((t) => t.type)).size === transports.length, 'transport types must be unique per city');
+check(transports.length <= 8, 'at most 8 transports per city');
+check(new Set(transports.map((t) => t.title)).size === transports.length, 'transport titles must be unique per city (each route needs its own title)');
 
 if (errors.length) {
   console.error('Spec rejected:\n - ' + errors.join('\n - '));
