@@ -51,8 +51,7 @@ export class QPayClient {
       return this.mockInvoice(input);
     }
 
-    const token = await this.getToken();
-    const response = await this.post('invoice', token, {
+    const response = await this.post('invoice', {
       invoice_code: this.configService.get<string>('qpay.invoiceCode'),
       sender_invoice_no: input.invoiceNumber,
       invoice_receiver_code: 'terminal',
@@ -115,8 +114,7 @@ export class QPayClient {
       return false;
     }
     try {
-      const token = await this.getToken();
-      const response = await this.post('payment/check', token, {
+      const response = await this.post('payment/check', {
         object_type: 'INVOICE',
         object_id: invoiceId,
         offset: { page_number: 1, page_limit: 10 },
@@ -177,11 +175,27 @@ export class QPayClient {
     return data.access_token;
   }
 
-  private async post(path: string, token: string, body: unknown): Promise<Response> {
+  /** POSTs to QPay; a 401 means the cached token was revoked, so it is dropped and the call retried once. */
+  private async post(path: string, body: unknown): Promise<Response> {
     const baseUrl = this.configService.getOrThrow<string>('qpay.baseUrl');
-    let response: Response;
+    let response = await this.send(`${baseUrl}/${path}`, path, await this.getToken(), body);
+    if (response.status === 401) {
+      this.logger.warn(`QPay ${path} returned 401, refreshing the access token`);
+      this.cachedToken = null;
+      this.tokenExpiresAt = 0;
+      response = await this.send(`${baseUrl}/${path}`, path, await this.getToken(), body);
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      this.logger.error(`QPay ${path} returned ${response.status}: ${detail.slice(0, 500)}`);
+      throw new ServiceUnavailableException('QPay үйлчилгээ алдаа буцаалаа. Түр хүлээгээд дахин оролдоно уу.');
+    }
+    return response;
+  }
+
+  private async send(url: string, path: string, token: string, body: unknown): Promise<Response> {
     try {
-      response = await fetch(`${baseUrl}/${path}`, {
+      return await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -190,11 +204,6 @@ export class QPayClient {
       this.logger.error(`QPay ${path} network error: ${err instanceof Error ? err.message : String(err)}`);
       throw new ServiceUnavailableException('QPay үйлчилгээтэй холбогдож чадсангүй.');
     }
-    if (!response.ok) {
-      this.logger.error(`QPay ${path} returned ${response.status}`);
-      throw new ServiceUnavailableException('QPay үйлчилгээ алдаа буцаалаа. Түр хүлээгээд дахин оролдоно уу.');
-    }
-    return response;
   }
 
   private mockInvoice(input: CreateQPayInvoiceInput): QPayInvoice {
