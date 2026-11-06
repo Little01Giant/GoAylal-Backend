@@ -17,7 +17,15 @@ import {
   PaymentMethod,
 } from './schemas/payment-transaction.schema.js';
 import { Counter, CounterDocument } from './schemas/counter.schema.js';
-import { Itinerary, ItineraryDocument, ItineraryStatus } from '../itineraries/schemas/itinerary.schema.js';
+import {
+  Itinerary,
+  ItineraryDocument,
+  ItineraryStatus,
+} from '../itineraries/schemas/itinerary.schema.js';
+import {
+  SuggestedTrip,
+  SuggestedTripDocument,
+} from '../destinations/schemas/suggested-trip.schema.js';
 import { CreateQPayInvoiceDto } from './dto/create-qpay-invoice.dto.js';
 import { ItineraryEmailService } from './itinerary-email.service.js';
 import { PaymentSettingsService } from './payment-settings.service.js';
@@ -55,6 +63,8 @@ export interface QPayInvoiceResult {
   readonly discountAmount: number;
   readonly discountName: string | null;
   readonly currency: string;
+  /** True for a free ready plan: it is already settled and unlocked, there is nothing to pay. */
+  readonly free?: boolean;
   readonly qpayInvoice: {
     readonly invoiceId: string;
     readonly qrText: string;
@@ -113,7 +123,9 @@ const STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
 
 /** The moment an invoice stops being offered to the payer. */
 function invoiceExpiresAt(transaction: { createdAt?: Date | undefined }): Date {
-  return new Date((transaction.createdAt?.getTime() ?? Date.now()) + INVOICE_REUSE_WINDOW_MS);
+  return new Date(
+    (transaction.createdAt?.getTime() ?? Date.now()) + INVOICE_REUSE_WINDOW_MS,
+  );
 }
 
 function sha256(value: string): string {
@@ -131,6 +143,8 @@ export class PaymentsService {
     private readonly itineraryModel: Model<ItineraryDocument>,
     @InjectModel(Counter.name)
     private readonly counterModel: Model<CounterDocument>,
+    @InjectModel(SuggestedTrip.name)
+    private readonly tripModel: Model<SuggestedTripDocument>,
     private readonly qpay: QPayClient,
     private readonly emailService: ItineraryEmailService,
     private readonly pricing: PricingService,
@@ -145,18 +159,33 @@ export class PaymentsService {
    * for a callback that never arrives.
    */
   private get statusCheckIntervalMs(): number {
-    return (this.configService.get<number>('qpay.statusCheckIntervalSeconds') ?? 0) * 1000;
+    return (
+      (this.configService.get<number>('qpay.statusCheckIntervalSeconds') ?? 0) *
+      1000
+    );
   }
 
   /** Atomic, instance-safe reference numbers: TRX-2026-1021-0001 / INV-2026-1021-0001. */
-  private async nextReferences(): Promise<{ transactionNumber: string; invoiceNumber: string }> {
-    const day = new Date(Date.now() + ULAANBAATAR_OFFSET_MS).toISOString().slice(0, 10);
+  private async nextReferences(): Promise<{
+    transactionNumber: string;
+    invoiceNumber: string;
+  }> {
+    const day = new Date(Date.now() + ULAANBAATAR_OFFSET_MS)
+      .toISOString()
+      .slice(0, 10);
     const counter = await this.counterModel
-      .findOneAndUpdate({ _id: `payment-${day}` }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: 'after' })
+      .findOneAndUpdate(
+        { _id: `payment-${day}` },
+        { $inc: { seq: 1 } },
+        { upsert: true, returnDocument: 'after' },
+      )
       .lean()
       .exec();
     const suffix = `${day.slice(0, 4)}-${day.slice(5, 7)}${day.slice(8, 10)}-${String(counter?.seq ?? 1).padStart(4, '0')}`;
-    return { transactionNumber: `TRX-${suffix}`, invoiceNumber: `INV-${suffix}` };
+    return {
+      transactionNumber: `TRX-${suffix}`,
+      invoiceNumber: `INV-${suffix}`,
+    };
   }
 
   /**
@@ -164,9 +193,14 @@ export class PaymentsService {
    * pricing plan after its best live discount. Authenticated payers are tied to their own itinerary;
    * guests are allowed only while guest checkout is enabled (dashboard setting, else GUEST_CHECKOUT_ENABLED).
    */
-  async createQPayInvoice(dto: CreateQPayInvoiceDto, user?: AuthenticatedUser): Promise<QPayInvoiceResult> {
+  async createQPayInvoice(
+    dto: CreateQPayInvoiceDto,
+    user?: AuthenticatedUser,
+  ): Promise<QPayInvoiceResult> {
     if (!user && !(await this.settings.getEffective()).guestCheckoutEnabled) {
-      throw new UnauthorizedException('Төлбөр хийхийн тулд нэвтэрсэн байх шаардлагатай.');
+      throw new UnauthorizedException(
+        'Төлбөр хийхийн тулд нэвтэрсэн байх шаардлагатай.',
+      );
     }
 
     const email = (dto.email ?? user?.email)?.toLowerCase();
@@ -174,12 +208,27 @@ export class PaymentsService {
       throw new BadRequestException('Имэйл хаяг шаардлагатай.');
     }
 
-    const itinerary = user ? await this.findPayableItinerary(dto.itineraryId, user) : null;
+    const itinerary = user
+      ? await this.findPayableItinerary(dto.itineraryId, user)
+      : null;
     const planSnapshot = sanitizePlanSnapshot(dto.planSnapshot);
     const planHash = sha256(JSON.stringify(planSnapshot ?? {}));
     const dedupeKey = user
       ? `u:${user.sub}|${itinerary?._id.toString() ?? planHash}`
       : `g:${email}|${planHash}`;
+
+    // A free ready plan is unlocked at once, without a QPay invoice. Only a signed-in payer can have one.
+    if (user && dto.tripSlug && (await this.isFreeTrip(dto.tripSlug))) {
+      return this.unlockFreeTrip({
+        slug: dto.tripSlug,
+        planHash,
+        planSnapshot,
+        itinerary,
+        email,
+        user,
+        title: dto.title,
+      });
+    }
 
     const quote = await this.pricing.quote(dto.planId);
     const reusable = await this.reuseOrExpirePending(dedupeKey, quote);
@@ -208,7 +257,9 @@ export class PaymentsService {
         planDurationDays: quote.durationDays,
         baseAmount: quote.basePrice,
         discountAmount: quote.discountAmount,
-        discountId: quote.discountId ? new Types.ObjectId(quote.discountId) : undefined,
+        discountId: quote.discountId
+          ? new Types.ObjectId(quote.discountId)
+          : undefined,
         discountName: quote.discountName ?? undefined,
         currency: 'MNT',
         method: PaymentMethod.QPAY,
@@ -219,9 +270,13 @@ export class PaymentsService {
         qpayQrImage: invoice.qrImage,
         qpayShortUrl: invoice.shortUrl,
         qpayUrls: [...invoice.urls],
-        items: [{ name: title, quantity: 1, unitPrice: amount, totalPrice: amount }],
+        items: [
+          { name: title, quantity: 1, unitPrice: amount, totalPrice: amount },
+        ],
         customerEmail: email,
-        planSnapshot: planSnapshot ? { ...planSnapshot, invoiceNumber, transactionNumber } : undefined,
+        planSnapshot: planSnapshot
+          ? { ...planSnapshot, invoiceNumber, transactionNumber }
+          : undefined,
       });
       return this.toInvoiceResult(transaction);
     } catch (err) {
@@ -229,19 +284,108 @@ export class PaymentsService {
         throw err;
       }
       // A concurrent request created the pending invoice for this payer and plan first.
-      const winner = await this.paymentModel.findOne({ dedupeKey, status: PaymentStatus.PENDING });
+      const winner = await this.paymentModel.findOne({
+        dedupeKey,
+        status: PaymentStatus.PENDING,
+      });
       if (winner) {
         return this.toInvoiceResult(winner);
       }
-      throw new ConflictException('Нэхэмжлэх үүсгэх үед давхцал гарлаа. Дахин оролдоно уу.');
+      throw new ConflictException(
+        'Нэхэмжлэх үүсгэх үед давхцал гарлаа. Дахин оролдоно уу.',
+      );
     }
+  }
+
+  private async isFreeTrip(slug: string): Promise<boolean> {
+    return (
+      (await this.tripModel.exists({
+        slug: slug.trim(),
+        isActive: true,
+        isFree: true,
+      })) !== null
+    );
+  }
+
+  /**
+   * Settles a free ready plan on the spot: a completed transaction of 0 ₮ (so the profile, receipt and unlock
+   * work as for any paid plan) and the itinerary unlocked. Repeating the call for the same plan returns the
+   * same transaction instead of creating another.
+   */
+  private async unlockFreeTrip(input: {
+    slug: string;
+    planHash: string;
+    planSnapshot: Record<string, unknown> | undefined;
+    itinerary: ItineraryDocument | null;
+    email: string;
+    user: AuthenticatedUser;
+    title: string | undefined;
+  }): Promise<QPayInvoiceResult> {
+    const { slug, planHash, planSnapshot, itinerary, email, user } = input;
+    const userId = new Types.ObjectId(user.sub);
+
+    const freeKey = `${user.sub}|${slug}|${planHash}`;
+    const findExisting = () =>
+      this.paymentModel
+        .findOne({ freeKey, status: PaymentStatus.COMPLETED })
+        .select('+freeKey');
+    const existing = await findExisting();
+    if (existing) {
+      await this.unlockItinerary(existing);
+      return this.toInvoiceResult(existing);
+    }
+
+    const title = input.title?.trim() || DEFAULT_TITLE;
+    const { transactionNumber, invoiceNumber } = await this.nextReferences();
+    let transaction: PaymentTransactionDocument;
+    try {
+      transaction = await this.paymentModel.create({
+        transactionNumber,
+        invoiceNumber,
+        freeKey,
+        itineraryId: itinerary?._id,
+        userId,
+        amount: 0,
+        baseAmount: 0,
+        discountAmount: 0,
+        currency: 'MNT',
+        method: PaymentMethod.FREE,
+        status: PaymentStatus.COMPLETED,
+        paidAt: new Date(),
+        items: [{ name: title, quantity: 1, unitPrice: 0, totalPrice: 0 }],
+        customerEmail: email,
+        planSnapshot: {
+          ...planSnapshot,
+          invoiceNumber,
+          transactionNumber,
+          freeTripSlug: slug,
+          planHash,
+        },
+      });
+    } catch (err) {
+      // A concurrent request (a double submit) unlocked the same plan first: hand back that one.
+      const winner = isDuplicateKeyError(err) ? await findExisting() : null;
+      if (!winner) {
+        throw err;
+      }
+      await this.unlockItinerary(winner);
+      return this.toInvoiceResult(winner);
+    }
+    this.logger.log(
+      `Free plan ${slug} unlocked as ${transaction.transactionNumber}`,
+    );
+    await this.afterSettlement(transaction);
+    return this.toInvoiceResult(transaction);
   }
 
   /**
    * Verifies (and if paid, settles) a payment. Settlement only ever follows QPay's own confirmation;
    * `simulate` is honoured solely in QPAY_MOCK mode, which is impossible in production.
    */
-  async verifyPayment(identifier: string, options: { simulate?: boolean } = {}): Promise<PaymentVerificationResult> {
+  async verifyPayment(
+    identifier: string,
+    options: { simulate?: boolean } = {},
+  ): Promise<PaymentVerificationResult> {
     const transaction = await this.findTransaction(identifier);
     if (!transaction) {
       throw new NotFoundException('Гүйлгээ олдсонгүй.');
@@ -253,19 +397,34 @@ export class PaymentsService {
    * Public form of `verifyPayment`: only the transaction's own id is accepted. Transaction and invoice numbers are
    * sequential and guessable, so they must not let anyone read or trigger another payer's payment.
    */
-  async verifyPaymentById(transactionId: string, options: { simulate?: boolean } = {}): Promise<PaymentVerificationResult> {
+  async verifyPaymentById(
+    transactionId: string,
+    options: { simulate?: boolean } = {},
+  ): Promise<PaymentVerificationResult> {
     const transaction = await this.findByTransactionId(transactionId);
     return this.verifyTransaction(transaction, options.simulate === true);
   }
 
   /** QPay webhook: the body is never trusted, the payment is re-checked with QPay. */
-  async handleCallback(paymentId: string | undefined): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
-    const transaction = paymentId ? await this.findTransaction(paymentId) : null;
+  async handleCallback(
+    paymentId: string | undefined,
+  ): Promise<{
+    received: boolean;
+    verified: boolean;
+    transactionNumber: string;
+  }> {
+    const transaction = paymentId
+      ? await this.findTransaction(paymentId)
+      : null;
     if (!transaction) {
       throw new NotFoundException('Харгалзах гүйлгээ олдсонгүй.');
     }
     const result = await this.verifyTransaction(transaction, false);
-    return { received: true, verified: result.verified, transactionNumber: result.transactionNumber };
+    return {
+      received: true,
+      verified: result.verified,
+      transactionNumber: result.transactionNumber,
+    };
   }
 
   /**
@@ -274,13 +433,21 @@ export class PaymentsService {
    */
   async handleInvoiceCallback(
     invoiceNumber: string,
-  ): Promise<{ received: boolean; verified: boolean; transactionNumber: string }> {
+  ): Promise<{
+    received: boolean;
+    verified: boolean;
+    transactionNumber: string;
+  }> {
     const transaction = await this.paymentModel.findOne({ invoiceNumber });
     if (!transaction) {
       throw new NotFoundException('Харгалзах гүйлгээ олдсонгүй.');
     }
     const result = await this.verifyTransaction(transaction, false);
-    return { received: true, verified: result.verified, transactionNumber: result.transactionNumber };
+    return {
+      received: true,
+      verified: result.verified,
+      transactionNumber: result.transactionNumber,
+    };
   }
 
   /**
@@ -289,7 +456,9 @@ export class PaymentsService {
    * (and cancelled at QPay), so the dialog and the database agree. Before that, QPay is asked only when
    * QPAY_STATUS_CHECK_INTERVAL_S is set, at most once per interval (a safety net for a callback that never arrived).
    */
-  async getPaymentStatus(transactionId: string): Promise<PaymentVerificationResult> {
+  async getPaymentStatus(
+    transactionId: string,
+  ): Promise<PaymentVerificationResult> {
     const transaction = await this.findByTransactionId(transactionId);
     if (transaction.status === PaymentStatus.COMPLETED) {
       await this.unlockItinerary(transaction);
@@ -304,8 +473,13 @@ export class PaymentsService {
     const interval = this.statusCheckIntervalMs;
     // The callback normally settles the payment within seconds, so QPay is not asked until the invoice has
     // been waiting a full interval, and then at most once per interval.
-    const waitedLongEnough = Date.now() - (transaction.createdAt?.getTime() ?? 0) >= interval;
-    if (interval > 0 && waitedLongEnough && (await this.claimQpayCheck(transaction._id as Types.ObjectId, interval))) {
+    const waitedLongEnough =
+      Date.now() - (transaction.createdAt?.getTime() ?? 0) >= interval;
+    if (
+      interval > 0 &&
+      waitedLongEnough &&
+      (await this.claimQpayCheck(transaction._id as Types.ObjectId, interval))
+    ) {
       return this.verifyTransaction(transaction, false);
     }
     return this.toVerification(transaction);
@@ -315,11 +489,15 @@ export class PaymentsService {
    * An invoice that ran out of time: ask QPay once (a payment made at the last moment is settled, not lost), and
    * expire it only if it is still unpaid. A payment that arrives after this still settles (expired -> completed).
    */
-  private async expireIfUnpaid(transaction: PaymentTransactionDocument): Promise<PaymentVerificationResult> {
+  private async expireIfUnpaid(
+    transaction: PaymentTransactionDocument,
+  ): Promise<PaymentVerificationResult> {
     const id = transaction._id as Types.ObjectId;
     if (!(await this.claimQpayCheck(id, EXPIRY_CHECK_SPACING_MS))) {
       // Another request is already checking it; the next poll sees the outcome.
-      return this.toVerification((await this.paymentModel.findById(id)) ?? transaction);
+      return this.toVerification(
+        (await this.paymentModel.findById(id)) ?? transaction,
+      );
     }
     const result = await this.verifyTransaction(transaction, false);
     if (result.verified) {
@@ -334,11 +512,16 @@ export class PaymentsService {
       this.logger.log(`Payment ${expired.transactionNumber} expired`);
       await this.cancelAtQpay([expired]);
     }
-    return this.toVerification(expired ?? (await this.paymentModel.findById(id)) ?? transaction);
+    return this.toVerification(
+      expired ?? (await this.paymentModel.findById(id)) ?? transaction,
+    );
   }
 
   /** Atomically reserves the right to ask QPay about this invoice now; false when it was asked recently. */
-  private async claimQpayCheck(transactionId: Types.ObjectId, intervalMs: number): Promise<boolean> {
+  private async claimQpayCheck(
+    transactionId: Types.ObjectId,
+    intervalMs: number,
+  ): Promise<boolean> {
     const claimed = await this.paymentModel.findOneAndUpdate(
       {
         _id: transactionId,
@@ -354,18 +537,34 @@ export class PaymentsService {
   }
 
   /** Closes invoices we gave up on at QPay too, so they cannot be paid later. Best effort, a few at a time. */
-  private async cancelAtQpay(transactions: readonly PaymentTransactionDocument[]): Promise<void> {
-    const invoiceIds = transactions.map((t) => t.qpayInvoiceId).filter((id): id is string => !!id);
-    for (let start = 0; start < invoiceIds.length; start += RECHECK_CONCURRENCY) {
-      await Promise.all(invoiceIds.slice(start, start + RECHECK_CONCURRENCY).map((id) => this.qpay.cancelInvoice(id)));
+  private async cancelAtQpay(
+    transactions: readonly PaymentTransactionDocument[],
+  ): Promise<void> {
+    const invoiceIds = transactions
+      .map((t) => t.qpayInvoiceId)
+      .filter((id): id is string => !!id);
+    for (
+      let start = 0;
+      start < invoiceIds.length;
+      start += RECHECK_CONCURRENCY
+    ) {
+      await Promise.all(
+        invoiceIds
+          .slice(start, start + RECHECK_CONCURRENCY)
+          .map((id) => this.qpay.cancelInvoice(id)),
+      );
     }
   }
 
   /** Re-checks every selected pending payment with QPay (a few at a time) and settles the paid ones. */
   async recheckMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
     const { transactions, missingIds } = await this.loadByIds(ids);
-    const pending = transactions.filter((t) => t.status === PaymentStatus.PENDING);
-    const settled = (await this.verifyInChunks(pending)).filter((r) => r.verified).length;
+    const pending = transactions.filter(
+      (t) => t.status === PaymentStatus.PENDING,
+    );
+    const settled = (await this.verifyInChunks(pending)).filter(
+      (r) => r.verified,
+    ).length;
     return {
       requested: ids.length,
       matched: transactions.length,
@@ -380,18 +579,27 @@ export class PaymentsService {
    * Closes stale pending invoices. Each is re-checked with QPay first, so a payment made after the modal
    * closed is settled instead of expired; only the still-unpaid ones become `expired`, in one write.
    */
-  async expirePendingMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
+  async expirePendingMany(
+    ids: readonly string[],
+  ): Promise<BulkTransactionsResult> {
     const { transactions, missingIds } = await this.loadByIds(ids);
-    const pending = transactions.filter((t) => t.status === PaymentStatus.PENDING);
+    const pending = transactions.filter(
+      (t) => t.status === PaymentStatus.PENDING,
+    );
     const results = await this.verifyInChunks(pending);
     const settled = results.filter((r) => r.verified).length;
-    const unpaidDocs = pending.filter((_, index) => results[index]?.verified !== true);
+    const unpaidDocs = pending.filter(
+      (_, index) => results[index]?.verified !== true,
+    );
     const unpaid = unpaidDocs.map((t) => t._id as Types.ObjectId);
 
     const res =
       unpaid.length > 0
         ? await this.paymentModel
-            .updateMany({ _id: { $in: unpaid }, status: PaymentStatus.PENDING }, { $set: { status: PaymentStatus.EXPIRED } })
+            .updateMany(
+              { _id: { $in: unpaid }, status: PaymentStatus.PENDING },
+              { $set: { status: PaymentStatus.EXPIRED } },
+            )
             .exec()
         : null;
     await this.cancelAtQpay(unpaidDocs);
@@ -407,11 +615,16 @@ export class PaymentsService {
   }
 
   /** Records a manual refund. It only marks the payment: money is returned through QPay/the bank by support. */
-  async markRefundedMany(ids: readonly string[]): Promise<BulkTransactionsResult> {
+  async markRefundedMany(
+    ids: readonly string[],
+  ): Promise<BulkTransactionsResult> {
     const { transactions, missingIds } = await this.loadByIds(ids);
     const res = await this.paymentModel
       .updateMany(
-        { _id: { $in: transactions.map((t) => t._id) }, status: PaymentStatus.COMPLETED },
+        {
+          _id: { $in: transactions.map((t) => t._id) },
+          status: PaymentStatus.COMPLETED,
+        },
         { $set: { status: PaymentStatus.REFUNDED } },
       )
       .exec();
@@ -427,7 +640,10 @@ export class PaymentsService {
 
   private async loadByIds(
     ids: readonly string[],
-  ): Promise<{ transactions: PaymentTransactionDocument[]; missingIds: string[] }> {
+  ): Promise<{
+    transactions: PaymentTransactionDocument[];
+    missingIds: string[];
+  }> {
     const transactions = await this.paymentModel
       .find({ _id: { $in: ids.map((id) => new Types.ObjectId(id)) } })
       .exec();
@@ -440,19 +656,32 @@ export class PaymentsService {
     transactions: readonly PaymentTransactionDocument[],
   ): Promise<PaymentVerificationResult[]> {
     const results: PaymentVerificationResult[] = [];
-    for (let start = 0; start < transactions.length; start += RECHECK_CONCURRENCY) {
+    for (
+      let start = 0;
+      start < transactions.length;
+      start += RECHECK_CONCURRENCY
+    ) {
       const chunk = transactions.slice(start, start + RECHECK_CONCURRENCY);
-      results.push(...(await Promise.all(chunk.map((t) => this.verifyTransaction(t, false)))));
+      results.push(
+        ...(await Promise.all(
+          chunk.map((t) => this.verifyTransaction(t, false)),
+        )),
+      );
     }
     return results;
   }
 
-  async findUserPayments(user: AuthenticatedUser): Promise<PaymentHistoryItemDto[]> {
+  async findUserPayments(
+    user: AuthenticatedUser,
+  ): Promise<PaymentHistoryItemDto[]> {
     await this.claimGuestPayments(user);
     // The history lists payments that happened. Invoices that were opened but never paid (pending, or expired
     // after the payer moved on) are not history, and the profile shows every entry here as paid.
     const docs = await this.paymentModel
-      .find({ userId: new Types.ObjectId(user.sub), status: PaymentStatus.COMPLETED })
+      .find({
+        userId: new Types.ObjectId(user.sub),
+        status: PaymentStatus.COMPLETED,
+      })
       .sort({ createdAt: -1 })
       .limit(HISTORY_LIMIT)
       .lean()
@@ -463,11 +692,15 @@ export class PaymentsService {
       transactionNumber: doc.transactionNumber,
       invoiceNumber: doc.invoiceNumber,
       title: doc.items?.[0]?.name ?? 'GoAylal аяллын захиалга',
-      destinationName: (doc.planSnapshot?.destinationName as string | undefined) ?? 'GoAylal аялал',
+      destinationName:
+        (doc.planSnapshot?.destinationName as string | undefined) ??
+        'GoAylal аялал',
       paymentMethod: doc.method,
       paymentMethodLabel: 'QPay (QR код)',
       bankName: 'Хаан Банк / QPay',
-      paidAt: new Date(doc.paidAt ?? doc.createdAt ?? Date.now()).toLocaleString('mn-MN'),
+      paidAt: new Date(
+        doc.paidAt ?? doc.createdAt ?? Date.now(),
+      ).toLocaleString('mn-MN'),
       amount: doc.amount,
       status: doc.status,
       statusLabel: STATUS_LABELS[doc.status],
@@ -477,7 +710,10 @@ export class PaymentsService {
   }
 
   /** Receipt for the payer (or an admin). Anyone else gets 404 so existence is not disclosed. */
-  async getReceipt(identifier: string, user: AuthenticatedUser): Promise<PaymentTransaction & { _id: Types.ObjectId }> {
+  async getReceipt(
+    identifier: string,
+    user: AuthenticatedUser,
+  ): Promise<PaymentTransaction & { _id: Types.ObjectId }> {
     await this.claimGuestPayments(user);
     const transaction = await this.findTransaction(identifier, true);
     const isOwner = transaction?.userId?.toString() === user.sub;
@@ -493,7 +729,11 @@ export class PaymentsService {
    */
   private async claimGuestPayments(user: AuthenticatedUser): Promise<void> {
     await this.paymentModel.updateMany(
-      { userId: { $exists: false }, customerEmail: user.email.toLowerCase(), status: PaymentStatus.COMPLETED },
+      {
+        userId: { $exists: false },
+        customerEmail: user.email.toLowerCase(),
+        status: PaymentStatus.COMPLETED,
+      },
       { $set: { userId: new Types.ObjectId(user.sub) } },
     );
   }
@@ -517,7 +757,9 @@ export class PaymentsService {
   }
 
   /** The payer-facing lookup: by the transaction's own ObjectId only, so another payment cannot be guessed. */
-  private async findByTransactionId(transactionId: string): Promise<PaymentTransactionDocument> {
+  private async findByTransactionId(
+    transactionId: string,
+  ): Promise<PaymentTransactionDocument> {
     const transaction = Types.ObjectId.isValid(transactionId)
       ? await this.paymentModel.findById(transactionId).exec()
       : null;
@@ -527,12 +769,23 @@ export class PaymentsService {
     return transaction;
   }
 
-  private async findTransaction(identifier: string, lean = false): Promise<PaymentTransactionDocument | null> {
+  private async findTransaction(
+    identifier: string,
+    lean = false,
+  ): Promise<PaymentTransactionDocument | null> {
     const filter = Types.ObjectId.isValid(identifier)
       ? { _id: new Types.ObjectId(identifier) }
-      : { $or: [{ transactionNumber: identifier }, { invoiceNumber: identifier }, { qpayInvoiceId: identifier }] };
+      : {
+          $or: [
+            { transactionNumber: identifier },
+            { invoiceNumber: identifier },
+            { qpayInvoiceId: identifier },
+          ],
+        };
     const query = this.paymentModel.findOne(filter);
-    return lean ? ((await query.lean().exec()) as PaymentTransactionDocument | null) : query.exec();
+    return lean
+      ? ((await query.lean().exec()) as PaymentTransactionDocument | null)
+      : query.exec();
   }
 
   private async verifyTransaction(
@@ -541,13 +794,21 @@ export class PaymentsService {
   ): Promise<PaymentVerificationResult> {
     // An invoice we expired can still turn out to be paid (paid before it was cancelled, or an older
     // invoice that was never cancelled at QPay): the money arrived, so it is settled rather than ignored.
-    if (transaction.status === PaymentStatus.PENDING || transaction.status === PaymentStatus.EXPIRED) {
+    if (
+      transaction.status === PaymentStatus.PENDING ||
+      transaction.status === PaymentStatus.EXPIRED
+    ) {
       const paid =
         (simulate && this.qpay.isMock) ||
-        (!!transaction.qpayInvoiceId && (await this.qpay.isInvoicePaid(transaction.qpayInvoiceId, transaction.amount)));
+        (!!transaction.qpayInvoiceId &&
+          (await this.qpay.isInvoicePaid(
+            transaction.qpayInvoiceId,
+            transaction.amount,
+          )));
       if (paid) {
         const settled = await this.settle(transaction._id as Types.ObjectId);
-        const current = settled ?? (await this.paymentModel.findById(transaction._id));
+        const current =
+          settled ?? (await this.paymentModel.findById(transaction._id));
         return this.toVerification(current ?? transaction);
       }
     } else if (transaction.status === PaymentStatus.COMPLETED) {
@@ -561,9 +822,14 @@ export class PaymentsService {
    * one-way: concurrent verify/callback/recheck calls produce exactly one transition and one set
    * of side effects. Returns null when another caller already settled (or the state is terminal).
    */
-  private async settle(transactionId: Types.ObjectId): Promise<PaymentTransactionDocument | null> {
+  private async settle(
+    transactionId: Types.ObjectId,
+  ): Promise<PaymentTransactionDocument | null> {
     const settled = await this.paymentModel.findOneAndUpdate(
-      { _id: transactionId, status: { $in: [PaymentStatus.PENDING, PaymentStatus.EXPIRED] } },
+      {
+        _id: transactionId,
+        status: { $in: [PaymentStatus.PENDING, PaymentStatus.EXPIRED] },
+      },
       { $set: { status: PaymentStatus.COMPLETED, paidAt: new Date() } },
       { returnDocument: 'after' },
     );
@@ -578,20 +844,30 @@ export class PaymentsService {
    * Unlocks the paid itinerary. Idempotent and safe to repeat, so a completed payment whose itinerary was left
    * locked (the process stopped between the two writes) is repaired the next time the payment is read.
    */
-  private async unlockItinerary(transaction: PaymentTransactionDocument): Promise<void> {
+  private async unlockItinerary(
+    transaction: PaymentTransactionDocument,
+  ): Promise<void> {
     if (!transaction.itineraryId) {
       return;
     }
     await this.itineraryModel.updateOne(
-      { _id: transaction.itineraryId, status: { $in: [ItineraryStatus.DRAFT, ItineraryStatus.SAVED] } },
+      {
+        _id: transaction.itineraryId,
+        status: { $in: [ItineraryStatus.DRAFT, ItineraryStatus.SAVED] },
+      },
       { $set: { status: ItineraryStatus.UNLOCKED } },
     );
   }
 
-  private async afterSettlement(transaction: PaymentTransactionDocument): Promise<void> {
+  private async afterSettlement(
+    transaction: PaymentTransactionDocument,
+  ): Promise<void> {
     await this.unlockItinerary(transaction);
 
-    if ((await this.settings.getEffective()).emailEnabled && transaction.customerEmail) {
+    if (
+      (await this.settings.getEffective()).emailEnabled &&
+      transaction.customerEmail
+    ) {
       const snapshot = transaction.planSnapshot ?? {};
       try {
         await this.emailService.sendItineraryEmail({
@@ -607,7 +883,9 @@ export class PaymentsService {
           transactionNumber: transaction.transactionNumber,
         });
       } catch (err) {
-        this.logger.error(`Itinerary email failed for ${transaction.transactionNumber}: ${String(err)}`);
+        this.logger.error(
+          `Itinerary email failed for ${transaction.transactionNumber}: ${String(err)}`,
+        );
       }
     }
   }
@@ -617,13 +895,21 @@ export class PaymentsService {
    * with QPay (the payer may have paid after the modal closed): if paid it is settled and returned,
    * otherwise it is expired so a fresh invoice can be created.
    */
-  private async reuseOrExpirePending(dedupeKey: string, quote: PriceQuote): Promise<PaymentTransactionDocument | null> {
-    const pending = await this.paymentModel.findOne({ dedupeKey, status: PaymentStatus.PENDING });
+  private async reuseOrExpirePending(
+    dedupeKey: string,
+    quote: PriceQuote,
+  ): Promise<PaymentTransactionDocument | null> {
+    const pending = await this.paymentModel.findOne({
+      dedupeKey,
+      status: PaymentStatus.PENDING,
+    });
     if (!pending) {
       return null;
     }
     // An invoice is also stale once the plan or its price changed (the admin edited pricing since).
-    const sameQuote = pending.amount === quote.finalPrice && String(pending.planId ?? '') === quote.planId;
+    const sameQuote =
+      pending.amount === quote.finalPrice &&
+      String(pending.planId ?? '') === quote.planId;
     const age = Date.now() - (pending.createdAt?.getTime() ?? 0);
     if (age < INVOICE_REUSE_WINDOW_MS && sameQuote) {
       return pending;
@@ -640,17 +926,23 @@ export class PaymentsService {
     return null;
   }
 
-  private toVerification(transaction: PaymentTransactionDocument): PaymentVerificationResult {
+  private toVerification(
+    transaction: PaymentTransactionDocument,
+  ): PaymentVerificationResult {
     return {
       verified: transaction.status === PaymentStatus.COMPLETED,
       transactionNumber: transaction.transactionNumber,
       status: transaction.status,
       expiresAt: invoiceExpiresAt(transaction).toISOString(),
-      ...(transaction.paidAt ? { paidAt: transaction.paidAt.toISOString() } : {}),
+      ...(transaction.paidAt
+        ? { paidAt: transaction.paidAt.toISOString() }
+        : {}),
     };
   }
 
-  private toInvoiceResult(transaction: PaymentTransactionDocument): QPayInvoiceResult {
+  private toInvoiceResult(
+    transaction: PaymentTransactionDocument,
+  ): QPayInvoiceResult {
     return {
       transactionId: transaction._id as Types.ObjectId,
       transactionNumber: transaction.transactionNumber,
@@ -662,6 +954,7 @@ export class PaymentsService {
       discountAmount: transaction.discountAmount ?? 0,
       discountName: transaction.discountName ?? null,
       currency: transaction.currency,
+      ...(transaction.method === PaymentMethod.FREE ? { free: true } : {}),
       qpayInvoice: {
         invoiceId: transaction.qpayInvoiceId ?? '',
         qrText: transaction.qpayQrText ?? '',

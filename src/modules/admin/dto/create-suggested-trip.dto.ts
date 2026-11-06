@@ -114,4 +114,9 @@ export class CreateSuggestedTripDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiProperty({ example: false, required: false, description: 'Зардал тооцоолох (unlock) төлбөргүй эсэх' })
+  @IsBoolean()
+  @IsOptional()
+  isFree?: boolean;
 }

@@ -348,6 +348,7 @@ export class AdminService implements OnModuleInit {
       reviewsCount: dto.reviewsCount ?? 1,
       highlights: dto.highlights ?? [],
       isActive: dto.isActive ?? true,
+      isFree: dto.isFree ?? false,
     });
   }
 

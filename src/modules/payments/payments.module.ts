@@ -6,6 +6,7 @@ import { PaymentSettings, PaymentSettingsSchema } from './schemas/payment-settin
 import { PaymentSettingsService } from './payment-settings.service.js';
 import { PricingModule } from '../pricing/pricing.module.js';
 import { Itinerary, ItinerarySchema } from '../itineraries/schemas/itinerary.schema.js';
+import { SuggestedTrip, SuggestedTripSchema } from '../destinations/schemas/suggested-trip.schema.js';
 import { PaymentsService } from './payments.service.js';
 import { PaymentsController } from './payments.controller.js';
 import { ItineraryEmailService } from './itinerary-email.service.js';
@@ -19,6 +20,7 @@ import { AuthModule } from '../auth/auth.module.js';
       { name: Itinerary.name, schema: ItinerarySchema },
       { name: Counter.name, schema: CounterSchema },
       { name: PaymentSettings.name, schema: PaymentSettingsSchema },
+      { name: SuggestedTrip.name, schema: SuggestedTripSchema },
     ]),
     AuthModule,
     PricingModule,

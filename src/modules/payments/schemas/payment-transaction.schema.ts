@@ -7,6 +7,8 @@ export enum PaymentMethod {
   QPAY = 'qpay',
   CARD = 'card',
   BANK_TRANSFER = 'bank_transfer',
+  /** A free ready plan: settled at once with amount 0, no QPay involved. */
+  FREE = 'free',
 }
 
 /** The only values the API ever emits. `refunded` is reserved for manual support action. */
@@ -113,6 +115,10 @@ export class PaymentTransaction {
     link: string;
   }>;
 
+  /** One free unlock per payer, plan and ready trip; enforced by a partial unique index. */
+  @Prop({ required: false, select: false })
+  freeKey?: string;
+
   @Prop({ required: false })
   bankName?: string;
 
@@ -139,6 +145,10 @@ PaymentTransactionSchema.index({ userId: 1, createdAt: -1 });
 PaymentTransactionSchema.index({ customerEmail: 1, createdAt: -1 });
 PaymentTransactionSchema.index({ status: 1, createdAt: -1 });
 PaymentTransactionSchema.index({ qpayInvoiceId: 1 });
+PaymentTransactionSchema.index(
+  { freeKey: 1 },
+  { name: 'uniq_free_key', unique: true, partialFilterExpression: { freeKey: { $type: 'string' } } },
+);
 PaymentTransactionSchema.index(
   { dedupeKey: 1 },
   {
