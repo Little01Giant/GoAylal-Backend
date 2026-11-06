@@ -47,6 +47,7 @@ export interface SuggestedTripItem {
   readonly rating: number;
   readonly reviewsCount: number;
   readonly highlights: readonly string[];
+  readonly isFree: boolean;
 }
 
 @Injectable()
@@ -116,6 +117,7 @@ export class DestinationsService {
       rating: d.rating,
       reviewsCount: d.reviewsCount,
       highlights: d.highlights,
+      isFree: d.isFree === true,
     }));
   }
 

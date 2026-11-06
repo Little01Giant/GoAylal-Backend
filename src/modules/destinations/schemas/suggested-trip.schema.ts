@@ -52,6 +52,10 @@ export class SuggestedTrip {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  /** True: the cost calculation (unlock) of this ready plan is free; no QPay invoice is made for it. */
+  @Prop({ type: Boolean, default: false })
+  isFree: boolean;
 }
 
 export const SuggestedTripSchema = SchemaFactory.createForClass(SuggestedTrip);

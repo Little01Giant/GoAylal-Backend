@@ -19,6 +19,12 @@ export class CreateQPayInvoiceDto {
   @MaxLength(64)
   itineraryId?: string | undefined;
 
+  @ApiPropertyOptional({ description: 'Бэлэн аяллын код (slug). Төлбөргүй аялал бол нэхэмжлэхгүйгээр шууд нээгдэнэ.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  tripSlug?: string | undefined;
+
   @ApiPropertyOptional({ description: 'Имэйл хаяг (нэвтрээгүй хэрэглэгчид заавал)', example: 'traveler@example.com' })
   @IsOptional()
   @IsEmail()
